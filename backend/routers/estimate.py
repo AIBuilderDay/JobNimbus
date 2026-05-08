@@ -4,6 +4,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from services.google.solar import get_solar_data
 from services.google.static_maps import build_url
 
 router = APIRouter(prefix="/api/estimate")
@@ -27,14 +28,17 @@ class RefineRequest(BaseModel):
 
 
 @router.post("/start")
-def start_estimate(req: StartEstimateRequest) -> dict[str, Any]:
+async def start_estimate(req: StartEstimateRequest) -> dict[str, Any]:
     estimate_id = str(uuid.uuid4())
+    solar = await get_solar_data(req.lat, req.lng)
+
     payload: dict[str, Any] = {
         "estimate_id": estimate_id,
         "address": req.address,
         "lat": req.lat,
         "lng": req.lng,
         "satellite_image_url": build_url(req.lat, req.lng),
+        "solar": solar,
         "total": {"low": 0, "high": 0},
         "breakdown": [],
         "confidence_range": None,
