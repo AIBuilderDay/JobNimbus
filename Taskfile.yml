@@ -1,6 +1,12 @@
 version: "3"
 
 tasks:
+  backend:dev:
+    desc: Run backend dev server locally with secrets injected from 1Password
+    dir: backend
+    cmds:
+      - op run --env-file=.env -- uv run fastapi dev main.py
+
   backend:build:
     desc: Build backend Docker image
     dir: backend
