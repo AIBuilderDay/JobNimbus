@@ -1,0 +1,19 @@
+version: "3"
+
+tasks:
+  backend:build:
+    desc: Build backend Docker image
+    dir: backend
+    cmds:
+      - docker build -t jobnimbus-backend .
+
+  backend:up:
+    desc: Start backend container
+    deps: [backend:build]
+    cmds:
+      - docker run --rm -p 8000:8000 --name jobnimbus-backend jobnimbus-backend
+
+  backend:down:
+    desc: Stop backend container
+    cmds:
+      - docker stop jobnimbus-backend
