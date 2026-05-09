@@ -1,6 +1,6 @@
 from urllib.parse import urlencode
 
-from config import get_google_maps_api_key
+from settings import settings
 
 
 def build_url(lat: float, lng: float, zoom: int = 20, size: str = "800x800") -> str:
@@ -9,6 +9,6 @@ def build_url(lat: float, lng: float, zoom: int = 20, size: str = "800x800") -> 
         "zoom": zoom,
         "size": size,
         "maptype": "satellite",
-        "key": get_google_maps_api_key(),
+        "key": settings.GOOGLE_MAPS_API_KEY,
     })
     return f"https://maps.googleapis.com/maps/api/staticmap?{params}"

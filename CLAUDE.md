@@ -9,7 +9,6 @@ backend/
   main.py                       # FastAPI app, lifespan, router registration
   settings.py                   # pydantic-settings BaseSettings — single source of env truth
   logger.py                     # get_logger(__name__) factory
-  config.py                     # legacy shim — delegates to settings; do NOT add new things here
 
   providers/                    # NEW provider code goes here. Wraps a single external API. Stateless.
     eagleview.py

@@ -1,5 +1,12 @@
+# Secrets / env
+.env
+.env.*
+!.env.example
+!.env.local.example
+!.env.prod.example
+
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,19 +14,34 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-*.prod
+# Dependencies / build output
+node_modules/
+dist/
+dist-ssr/
+build/
+.vite/
+.turbo/
 
-# Editor directories and files
+# TypeScript
+*.tsbuildinfo
+
+# Test / coverage
+coverage/
+
+# Editor / IDE
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc local-only files (kept for back-compat)
+*.local
+*.prod
