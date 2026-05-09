@@ -2,7 +2,7 @@ import { memo, useMemo, useCallback, useRef } from "react";
 import DeckGL from "@deck.gl/react";
 import { Tile3DLayer } from "@deck.gl/geo-layers";
 import type { PickingInfo } from "@deck.gl/core";
-import type { BuildingInsightsResponse, RoofSegment } from "../types/solar";
+import type { BuildingInsightsResponse } from "../types/solar";
 import { createRoofSegmentLayer } from "../layers/roofSegmentLayer";
 
 const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
@@ -102,15 +102,15 @@ export default memo(function Scene({
 
   const handleClick = useCallback(
     (info: PickingInfo) => {
+      console.log("[Scene click]", { layerId: info.layer?.id, object: info.object, selectedIndices });
       if (info.layer?.id === "roof-segments" && info.object) {
-        const segs = buildingInsights!.segments;
-        const idx = segs.indexOf(info.object as RoofSegment);
+        const feature = info.object as { properties?: { id?: number } };
+        const idx = feature.properties?.id ?? -1;
+        console.log("[Scene] toggling segment", idx);
         onToggleSegment(idx);
-      } else {
-        onClearSegments();
       }
     },
-    [buildingInsights, onToggleSegment, onClearSegments]
+    [onToggleSegment, selectedIndices]
   );
 
   return (

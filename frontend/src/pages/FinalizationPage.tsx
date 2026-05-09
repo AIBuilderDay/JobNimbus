@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import DarkLayout from "../components/layout/DarkLayout";
 import BrandMark from "../components/ui/BrandMark";
@@ -6,43 +5,12 @@ import GlassNav, {
   NavDivider,
   NavMeta,
   SavedIndicator,
-  NavGhostButton,
-  NavPrimaryButton,
+  NavIconButton,
 } from "../components/ui/GlassNav";
+import StepCrumbs from "../components/ui/StepCrumbs";
+import { useEstimatorStore } from "../store/estimatorStore";
+import { useAutoSync } from "../hooks/useAutoSync";
 
-/* ------------------------------------------------------------------ */
-/*  Completed step crumbs (all green)                                  */
-/* ------------------------------------------------------------------ */
-
-const steps = [
-  { n: 1, label: "Address", path: "/address" },
-  { n: 2, label: "Capture", path: "/estimator" },
-  { n: 3, label: "Facets", path: "/estimator" },
-  { n: 4, label: "Pricing", path: "/pricing" },
-  { n: 5, label: "Proposal", path: "/proposal" },
-];
-
-function CompletedCrumbs() {
-  const nav = useNavigate();
-  return (
-    <div className="flex items-center gap-1.5">
-      {steps.map((s) => (
-        <button
-          key={s.n}
-          onClick={() => nav(s.path)}
-          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold font-mono whitespace-nowrap cursor-pointer border-none hover:opacity-80 transition-opacity"
-          style={{
-            background: "rgba(58,166,118,0.18)",
-            color: "#6fdba6",
-            boxShadow: "inset 0 0 0 1px rgba(58,166,118,0.25)",
-          }}
-        >
-          &#10003; {s.label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 /* ------------------------------------------------------------------ */
 /*  Timeline event                                                     */
@@ -149,15 +117,8 @@ function NextStep({
 
 export default function FinalizationPage() {
   const navigate = useNavigate();
-  const [copied, setCopied] = useState(false);
-
-  const shareLink = "crew.app/p/EST-2418-d3f9";
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(`https://${shareLink}`);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  const { address } = useEstimatorStore();
+  const { isSyncing, lastSyncedAt } = useAutoSync();
 
   const timelineEvents: TimelineEvent[] = [
     {
@@ -190,31 +151,19 @@ export default function FinalizationPage() {
     <DarkLayout>
       {/* Nav */}
       <GlassNav>
-        <Link to="/" className="flex items-center gap-3 no-underline shrink-0">
+        <Link to="/" className="shrink-0">
           <BrandMark size={32} />
-          <div className="flex flex-col">
-            <span className="text-[13px] font-semibold text-white leading-tight">
-              Holloway re-roof
-            </span>
-            <span className="text-[10.5px] font-mono text-white/50">
-              EST-2418 &middot; Sent
-            </span>
-          </div>
         </Link>
 
         <NavDivider />
-        <NavMeta label="PROPERTY" value="412 W Holloway Ave · Tampa, FL" />
+        <NavMeta label="PROPERTY" value={address ?? "No address selected"} />
         <NavDivider />
-        <CompletedCrumbs />
+        <StepCrumbs current={6} completed />
         <NavDivider />
-        <SavedIndicator text="Delivered" />
+        <SavedIndicator isSyncing={isSyncing} lastSyncedAt={lastSyncedAt} />
         <NavDivider />
-        <NavGhostButton onClick={() => navigate("/estimates")}>
-          All estimates
-        </NavGhostButton>
-        <NavPrimaryButton onClick={() => navigate("/address")}>
-          Start a new estimate
-        </NavPrimaryButton>
+        <NavIconButton icon="list" tooltip="All estimates" onClick={() => navigate("/estimates")} />
+        <NavIconButton icon="add" tooltip="New estimate" variant="primary" onClick={() => navigate("/address")} />
       </GlassNav>
 
       {/* Body */}
@@ -401,23 +350,6 @@ export default function FinalizationPage() {
             </div>
           </div>
 
-          {/* Share link card */}
-          <div className="rounded-2xl p-4 border-2 border-dashed border-white/15 bg-white/5 flex items-center justify-between gap-3">
-            <div>
-              <div className="text-[10px] font-mono text-white/45 uppercase tracking-wider mb-1">
-                SHAREABLE LINK
-              </div>
-              <div className="text-[13px] font-mono text-white/80">
-                {shareLink}
-              </div>
-            </div>
-            <button
-              onClick={handleCopy}
-              className="py-2 px-4 rounded-lg bg-white/10 text-white text-[12px] font-semibold cursor-pointer border border-white/15 hover:bg-white/15 transition-colors shrink-0"
-            >
-              {copied ? "Copied!" : "Copy"}
-            </button>
-          </div>
         </div>
       </main>
     </DarkLayout>

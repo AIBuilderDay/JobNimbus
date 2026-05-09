@@ -1,5 +1,5 @@
-import { Link } from "react-router-dom";
-import GlassNav from "../components/ui/GlassNav";
+import { Link, useNavigate } from "react-router-dom";
+import GlassNav, { NavIconButton } from "../components/ui/GlassNav";
 import BrandMark from "../components/ui/BrandMark";
 
 /* ------------------------------------------------------------------ */
@@ -173,6 +173,7 @@ const logoNames = ["StormGuard", "Apex Roofing", "Vertex Co.", "Summit Crews", "
 /* ------------------------------------------------------------------ */
 
 export default function LandingPage() {
+  const navigate = useNavigate();
   return (
     <div className="min-h-screen bg-white text-ink font-sans">
       {/* ---- NAV ---- */}
@@ -192,18 +193,8 @@ export default function LandingPage() {
 
           <div className="flex-1" />
 
-          <Link
-            to="/estimates"
-            className="py-2 px-3 text-[12.5px] font-semibold text-ink/70 hover:text-ink bg-transparent border border-ink/12 rounded-[10px] no-underline transition-colors hover:bg-ink/[0.03] font-sans"
-          >
-            History
-          </Link>
-          <Link
-            to="/address"
-            className="py-2.5 px-3.5 bg-ink text-white border-none rounded-[10px] text-[12.5px] font-semibold no-underline font-sans tracking-tight hover:bg-ink/90 transition-colors"
-          >
-            Start estimate
-          </Link>
+          <NavIconButton icon="history" tooltip="Estimate history" theme="light" onClick={() => navigate("/estimates")} />
+          <NavIconButton icon="add" tooltip="Start estimate" variant="primary" theme="light" onClick={() => navigate("/address")} />
         </GlassNav>
       </div>
 

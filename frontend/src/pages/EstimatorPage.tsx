@@ -2,6 +2,8 @@ import { useState, useCallback, useRef, useEffect, type ReactNode, type CSSPrope
 import { useNavigate } from "react-router-dom";
 import Scene from "../components/Scene";
 import BrandMark from "../components/ui/BrandMark";
+import GlassNav, { NavDivider, NavMeta, NavIconButton, SavedIndicator } from "../components/ui/GlassNav";
+import StepCrumbs from "../components/ui/StepCrumbs";
 import CrewChat from "../components/CrewChat";
 import { useEstimatorStore } from "../store/estimatorStore";
 import { fetchRoofPolygons } from "../api/roofPolygons";
@@ -9,18 +11,18 @@ import type { RoofSegment } from "../types/solar";
 import RoofBlueprint, { type BlueprintSegment } from "../components/RoofBlueprint";
 import ModelViewer from "../components/ModelViewer";
 import { MATERIALS, type MaterialTab } from "../data/materials";
+import { useAutoSync } from "../hooks/useAutoSync";
 
 type ViewMode = "satellite" | "topdown" | "3d";
 type ToolId = "select" | "lasso" | "measure" | "split" | "note";
 interface PanelPos { x: number; y: number; }
-interface Step { n: number; label: string; status: "done" | "current" | "todo"; path: string; }
 interface ToolDef { id: ToolId; label: string; icon: string; }
 
-const STEPS: Step[] = [
-  { n: 1, label: "Address", status: "done", path: "/address" },
-  { n: 2, label: "Materials", status: "current", path: "/estimator" },
-  { n: 3, label: "Proposal", status: "todo", path: "/proposal" },
-  { n: 4, label: "Finalize", status: "todo", path: "/finalization" },
+const ESTIMATOR_STEPS = [
+  { n: 1, label: "Address", path: "/address" },
+  { n: 2, label: "Materials", path: "/estimator" },
+  { n: 3, label: "Proposal", path: "/proposal" },
+  { n: 4, label: "Finalize", path: "/finalization" },
 ];
 
 
@@ -96,6 +98,12 @@ export default function EstimatorPage() {
     selectAllSegments, clearSelectedSegments, estimateId, selectedMaterialId,
     setSelectedMaterialId, setSegmentPolygons,
   } = useEstimatorStore();
+  const { isSyncing, lastSyncedAt, syncNow } = useAutoSync();
+
+  const handleNext = () => {
+    syncNow();
+    navigate("/pricing");
+  };
 
   useEffect(() => {
     if (!location || !buildingInsights) return;
@@ -157,7 +165,7 @@ export default function EstimatorPage() {
       {/* Canvas — Google 3D Tiles (satellite), top-down blueprint, or 3D model */}
       <div className="absolute inset-0 z-0">
         {mode === "3d" ? (
-          <ModelViewer address={address ?? ""} selectedSegmentIndices={selectedSegmentIndices} onToggleSegment={toggleSegmentIndex} onClearSegments={clearSelectedSegments} />
+          <ModelViewer address={address ?? ""} buildingInsights={buildingInsights} selectedSegmentIndices={selectedSegmentIndices} onToggleSegment={toggleSegmentIndex} onClearSegments={clearSelectedSegments} />
         ) : mode === "topdown" ? (
           <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: "#0e1830" }}>
             {segments.length > 0 ? (
@@ -189,81 +197,38 @@ export default function EstimatorPage() {
       </div>
 
       {/* Top nav */}
-      <div className="absolute top-5 left-1/2 -translate-x-1/2 z-40 max-w-[calc(100vw-48px)]">
-        <nav className="flex flex-row items-center justify-between py-3 pl-5 pr-3.5 bg-white/10 backdrop-blur-md rounded-[18px] shadow-[0_1px_0_rgba(255,255,255,0.10)_inset,0_8px_26px_rgba(0,0,0,0.25),0_0_0_1px_rgba(255,255,255,0.10)]" style={{ width: 1240 }}>
-          <div className="flex items-center gap-4 shrink-0">
-            <BrandMark size={30} />
-            <div className="flex flex-col gap-px px-1">
-              <span className="text-[13px] font-semibold text-white tracking-tight">Roof Estimate</span>
-              <span className="text-[9.5px] font-mono text-white/45 tracking-wider">{estimateId ? `${estimateId.slice(0, 8).toUpperCase()} · Draft` : "Draft"}</span>
-            </div>
-            <div className="w-px h-6.5 bg-white/12" />
-            {address ? (() => {
-              const parsed = parseAddress(address);
-              return (
-                <div className="flex items-center gap-3 px-1">
-                  <div className="flex flex-col gap-px">
-                    <span className="text-[9.5px] font-mono text-white/45 tracking-wider uppercase">STREET</span>
-                    <span className="text-xs font-semibold text-white font-mono">{parsed.street}</span>
-                  </div>
-                  {parsed.city && (
-                    <div className="flex flex-col gap-px">
-                      <span className="text-[9.5px] font-mono text-white/45 tracking-wider uppercase">CITY</span>
-                      <span className="text-xs font-semibold text-white font-mono">{parsed.city}</span>
-                    </div>
-                  )}
-                  {parsed.stateZip && (
-                    <div className="flex flex-col gap-px">
-                      <span className="text-[9.5px] font-mono text-white/45 tracking-wider uppercase">STATE / ZIP</span>
-                      <span className="text-xs font-semibold text-white font-mono">{parsed.stateZip}</span>
-                    </div>
-                  )}
-                </div>
-              );
-            })() : (
-              <div className="flex flex-col gap-px px-1">
-                <span className="text-[9.5px] font-mono text-white/45 tracking-wider uppercase">PROPERTY</span>
-                <span className="text-xs font-semibold text-white font-mono">No address selected</span>
+      <GlassNav wrapperClassName="absolute top-5 left-1/2 -translate-x-1/2 z-40 max-w-[calc(100vw-48px)]" minWidth={1240}>
+        <div className="flex items-center gap-4 shrink-0">
+          <BrandMark size={30} />
+          <div className="flex flex-col gap-px px-1">
+            <span className="text-[13px] font-semibold text-white tracking-tight">Roof Estimate</span>
+            <span className="text-[9.5px] font-mono text-white/45 tracking-wider">{estimateId ? `${estimateId.slice(0, 8).toUpperCase()} · Draft` : "Draft"}</span>
+          </div>
+          <NavDivider />
+          {address ? (() => {
+            const parsed = parseAddress(address);
+            return (
+              <div className="flex items-center gap-3 px-1">
+                <NavMeta label="STREET" value={parsed.street} />
+                {parsed.city && <NavMeta label="CITY" value={parsed.city} />}
+                {parsed.stateZip && <NavMeta label="STATE / ZIP" value={parsed.stateZip} />}
               </div>
-            )}
-          </div>
+            );
+          })() : (
+            <NavMeta label="PROPERTY" value="No address selected" />
+          )}
+        </div>
 
-          {/* Divider */}
-          <div className="w-px h-6.5 bg-white/12" />
+        <NavDivider />
+        <StepCrumbs current={2} steps={ESTIMATOR_STEPS} />
 
-          {/* Step crumbs */}
-          <div className="flex items-center gap-1">
-            {STEPS.map((step) => (
-              <button key={step.n}
-                onClick={() => step.status !== "todo" && step.path !== "/estimator" && navigate(step.path)}
-                disabled={step.status === "todo"}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-mono font-semibold transition-colors border-none ${step.status === "todo" ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-white/10"} ${step.status === "current" ? "bg-blue/25 text-white" : "bg-transparent text-white"}`}>
-                {step.status === "done" ? (
-                  <span className="material-symbols-rounded text-[16px] text-green">check_circle</span>
-                ) : (
-                  <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${step.status === "current" ? "bg-blue text-white" : "bg-white/8 text-white/30"}`}>{step.n}</span>
-                )}
-                {step.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-3 shrink-0">
-            <button className="group relative w-9 h-9 flex items-center justify-center bg-transparent text-white/85 border border-white/15 rounded-[10px] cursor-pointer hover:bg-white/8 transition-colors">
-              <span className="material-symbols-rounded text-[20px]">save</span>
-              <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 rounded-md bg-ink text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">Save</span>
-            </button>
-            <button onClick={() => navigate("/estimates")} className="group relative w-9 h-9 flex items-center justify-center rounded-[10px] cursor-pointer border transition-colors" style={{ background: "rgba(220,60,60,0.15)", color: "#dc3c3c", borderColor: "rgba(220,60,60,0.3)" }} onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(220,60,60,0.25)"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(220,60,60,0.15)"; }}>
-              <span className="material-symbols-rounded text-[20px]">cancel</span>
-              <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 rounded-md bg-ink text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">Cancel</span>
-            </button>
-            <button onClick={() => navigate("/pricing")} disabled={selectedSegmentIndices.length === 0 || !selectedMaterialId} className={`group relative w-9 h-9 flex items-center justify-center border-none rounded-[10px] transition-colors ${selectedSegmentIndices.length > 0 && selectedMaterialId ? "bg-white text-ink cursor-pointer hover:bg-white/90" : "bg-white/30 text-white/40 cursor-not-allowed"}`}>
-              <span className="material-symbols-rounded text-[20px]">arrow_forward</span>
-              <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 rounded-md bg-ink text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">Next</span>
-            </button>
-          </div>
-        </nav>
-      </div>
+        <SavedIndicator isSyncing={isSyncing} lastSyncedAt={lastSyncedAt} />
+        <div className="flex items-center gap-3 shrink-0">
+          <NavIconButton icon="save" tooltip="Save" onClick={syncNow} />
+          <NavIconButton icon="cancel" tooltip="Cancel" variant="danger" onClick={() => navigate("/estimates")} />
+          <NavIconButton icon="arrow_forward" tooltip="Next" variant="primary" onClick={handleNext} disabled={selectedSegmentIndices.length === 0 || !selectedMaterialId} />
+        </div>
+      </GlassNav>
 
       {/* Spec card */}
       <GlassPanel id="spec" editLayout={editLayout} positions={panelPositions} onDragStart={handlePanelDragStart} className="bg-white/88 text-ink p-5" style={{ top: 90, left: 20, width: 320, zIndex: 30 }}>

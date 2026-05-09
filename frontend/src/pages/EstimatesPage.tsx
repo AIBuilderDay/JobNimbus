@@ -5,7 +5,7 @@ import BrandMark from "../components/ui/BrandMark";
 import GlassNav, {
   NavDivider,
   NavMeta,
-  NavPrimaryButton,
+  NavIconButton,
 } from "../components/ui/GlassNav";
 import StatusPill from "../components/ui/StatusPill";
 import { useEstimates } from "../hooks/useEstimates";
@@ -416,9 +416,7 @@ export default function EstimatesPage() {
         <NavDivider />
         <NavMeta label="VIEWING" value="All estimates · last 90 days" />
         <NavDivider />
-        <NavPrimaryButton onClick={() => navigate("/address")}>
-          + New estimate
-        </NavPrimaryButton>
+        <NavIconButton icon="add" tooltip="New estimate" variant="primary" onClick={() => navigate("/address")} />
       </GlassNav>
 
       {/* ---- Content ---- */}

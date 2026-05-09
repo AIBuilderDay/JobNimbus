@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import DarkLayout from "../components/layout/DarkLayout";
 import BrandMark from "../components/ui/BrandMark";
@@ -6,64 +5,14 @@ import GlassNav, {
   NavDivider,
   NavMeta,
   SavedIndicator,
-  NavGhostButton,
-  NavPrimaryButton,
+  NavIconButton,
 } from "../components/ui/GlassNav";
+import StepCrumbs from "../components/ui/StepCrumbs";
 import { useLineItems } from "../hooks/useEstimates";
 import { useEstimatorStore } from "../store/estimatorStore";
 import { getMaterialById } from "../data/materials";
+import { useAutoSync } from "../hooks/useAutoSync";
 
-/* ------------------------------------------------------------------ */
-/*  Step crumbs                                                        */
-/* ------------------------------------------------------------------ */
-
-const steps = [
-  { n: 1, label: "Address", path: "/address" },
-  { n: 2, label: "Capture", path: "/estimator" },
-  { n: 3, label: "Facets", path: "/estimator" },
-  { n: 4, label: "Pricing", path: "/pricing" },
-  { n: 5, label: "Proposal", path: "/proposal" },
-];
-
-function StepCrumbs({ current }: { current: number }) {
-  const nav = useNavigate();
-  return (
-    <div className="flex items-center gap-1.5">
-      {steps.map((s) => {
-        const done = s.n < current;
-        const active = s.n === current;
-        const todo = s.n > current;
-
-        let style: React.CSSProperties = {};
-        if (done) {
-          style = {
-            background: "rgba(255,255,255,0.08)",
-            color: "rgba(255,255,255,0.85)",
-          };
-        } else if (active) {
-          style = {
-            background: "rgba(76,133,229,0.22)",
-            color: "#fff",
-            boxShadow: "inset 0 0 0 1px rgba(76,133,229,0.5)",
-          };
-        } else if (todo) {
-          style = { color: "rgba(255,255,255,0.45)" };
-        }
-
-        return (
-          <button
-            key={s.n}
-            onClick={() => nav(s.path)}
-            className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold font-mono whitespace-nowrap cursor-pointer border-none hover:opacity-80 transition-opacity"
-            style={style}
-          >
-            {s.n} {s.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 /* ------------------------------------------------------------------ */
 /*  Toggle switch                                                      */
@@ -169,6 +118,18 @@ function FinancingOption({
   );
 }
 
+/* ------------------------------------------------------------------ */
+/*  Monthly payment helper                                             */
+/* ------------------------------------------------------------------ */
+
+function monthlyPayment(total: number, down: number, aprPct: number, months: number): string {
+  const principal = total - down;
+  if (aprPct === 0) return Math.round(principal / months).toLocaleString();
+  const r = aprPct / 100 / 12;
+  const pmt = principal * (r * Math.pow(1 + r, months)) / (Math.pow(1 + r, months) - 1);
+  return Math.round(pmt).toLocaleString();
+}
+
 /* ================================================================== */
 /*  PricingPage                                                        */
 /* ================================================================== */
@@ -176,7 +137,8 @@ function FinancingOption({
 export default function PricingPage() {
   const navigate = useNavigate();
   const { data: lineItems = [] } = useLineItems();
-  const { selectedMaterialId, buildingInsights, selectedSegmentIndices } = useEstimatorStore();
+  const { address, selectedMaterialId, buildingInsights, selectedSegmentIndices, pricingState, setPricingState } = useEstimatorStore();
+  const { isSyncing, lastSyncedAt, syncNow } = useAutoSync();
 
   const selectedMaterial = selectedMaterialId ? getMaterialById(selectedMaterialId) : null;
 
@@ -189,49 +151,40 @@ export default function PricingPage() {
   const laborCost = 3870;
   const disposalCost = 420;
 
-  const [activeTab, setActiveTab] = useState(0);
-  const [marginPct, setMarginPct] = useState(38);
-  const [toggles, setToggles] = useState([true, true, false]);
-  const [financing, setFinancing] = useState([true, true, false, false]);
+  const { activeTab, marginPct, toggles, financing } = pricingState;
+  const setActiveTab = (v: number) => setPricingState({ activeTab: v });
+  const setMarginPct = (v: number) => setPricingState({ marginPct: v });
+  const setFinancing = (v: number) => setPricingState({ financing: v });
 
   const subtotal = materialCost + laborCost + disposalCost;
   const grossProfit = Math.round(subtotal * (marginPct / (100 - marginPct)));
   const customerTotal = subtotal + grossProfit;
 
   const toggleAt = (i: number) =>
-    setToggles((p) => p.map((v, j) => (j === i ? !v : v)));
-  const toggleFinancing = (i: number) =>
-    setFinancing((p) => p.map((v, j) => (j === i ? !v : v)));
+    setPricingState({ toggles: toggles.map((v, j) => (j === i ? !v : v)) });
+  const selectFinancing = (i: number) => setFinancing(i);
+
+  const handleNext = () => {
+    syncNow();
+    navigate("/proposal");
+  };
 
   return (
     <DarkLayout>
       {/* Nav */}
       <GlassNav>
-        <Link to="/" className="flex items-center gap-3 no-underline shrink-0">
+        <Link to="/" className="shrink-0">
           <BrandMark size={32} />
-          <div className="flex flex-col">
-            <span className="text-[13px] font-semibold text-white leading-tight">
-              Holloway re-roof
-            </span>
-            <span className="text-[10.5px] font-mono text-white/50">
-              EST-2418 &middot; Draft
-            </span>
-          </div>
         </Link>
 
         <NavDivider />
-        <NavMeta label="PROPERTY" value="412 W Holloway Ave · Tampa, FL" />
+        <NavMeta label="PROPERTY" value={address ?? "No address selected"} />
         <NavDivider />
         <StepCrumbs current={4} />
         <NavDivider />
-        <SavedIndicator text="Saved · just now" />
+        <SavedIndicator isSyncing={isSyncing} lastSyncedAt={lastSyncedAt} />
         <NavDivider />
-        <NavGhostButton onClick={() => navigate("/estimator")}>
-          Back to canvas
-        </NavGhostButton>
-        <NavPrimaryButton onClick={() => navigate("/proposal")}>
-          Continue &middot; Proposal
-        </NavPrimaryButton>
+        <NavIconButton icon="arrow_forward" tooltip="Continue to Proposal" variant="primary" onClick={handleNext} />
       </GlassNav>
 
       {/* Body */}
@@ -246,9 +199,6 @@ export default function PricingPage() {
             <h1 className="font-serif text-[44px] leading-[1.06] font-normal tracking-[-1px] text-white mt-1.5">
               Build the line items.
             </h1>
-            <p className="text-[13px] text-white/50 mt-1 font-mono">
-              {lineItems.length} lines &middot; auto-generated
-            </p>
           </div>
 
           {/* Line items card */}
@@ -406,11 +356,14 @@ export default function PricingPage() {
                     Customer total
                   </div>
                   <div className="text-[11px] text-muted mt-0.5">
-                    $0 down &middot; 84mo
+                    {financing === 0 && "$0 down · 84mo"}
+                    {financing === 1 && "$2,500 down · 60mo"}
+                    {financing === 2 && "Same as cash · 18mo"}
+                    {financing === 3 && "Pay in full · 3% discount"}
                   </div>
                 </div>
                 <div className="text-[36px] font-mono font-bold text-ink leading-none tracking-tight">
-                  ${Math.round(customerTotal).toLocaleString()}
+                  ${Math.round(financing === 3 ? customerTotal * 0.97 : customerTotal).toLocaleString()}
                 </div>
               </div>
             </div>
@@ -421,7 +374,7 @@ export default function PricingPage() {
                 All figures lock when you continue.
               </span>
               <button
-                onClick={() => navigate("/proposal")}
+                onClick={handleNext}
                 className="py-2.5 px-5 bg-ink text-white rounded-xl text-[13px] font-semibold cursor-pointer border-none hover:bg-ink-2 transition-colors"
               >
                 Continue
@@ -432,32 +385,32 @@ export default function PricingPage() {
           {/* Financing card */}
           <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(21,41,82,0.08)] p-5">
             <div className="text-[13px] font-semibold text-ink mb-3">
-              Financing options to show
+              Financing
             </div>
             <div className="grid grid-cols-2 gap-2.5">
               <FinancingOption
                 title="$0 down · 84 mo"
-                sub="9.99% APR · $336/mo"
-                selected={financing[0]}
-                onClick={() => toggleFinancing(0)}
+                sub={`9.99% APR · $${monthlyPayment(customerTotal, 0, 9.99, 84)}/mo`}
+                selected={financing === 0}
+                onClick={() => selectFinancing(0)}
               />
               <FinancingOption
                 title="$2,500 down · 60 mo"
-                sub="7.99% APR · $456/mo"
-                selected={financing[1]}
-                onClick={() => toggleFinancing(1)}
+                sub={`7.99% APR · $${monthlyPayment(customerTotal, 2500, 7.99, 60)}/mo`}
+                selected={financing === 1}
+                onClick={() => selectFinancing(1)}
               />
               <FinancingOption
                 title="Same as cash · 18 mo"
-                sub="0% promo · $1,421/mo"
-                selected={financing[2]}
-                onClick={() => toggleFinancing(2)}
+                sub={`0% promo · $${monthlyPayment(customerTotal, 0, 0, 18)}/mo`}
+                selected={financing === 2}
+                onClick={() => selectFinancing(2)}
               />
               <FinancingOption
                 title="Pay in full"
-                sub="3% cash discount"
-                selected={financing[3]}
-                onClick={() => toggleFinancing(3)}
+                sub={`3% discount · $${Math.round(customerTotal * 0.97).toLocaleString()}`}
+                selected={financing === 3}
+                onClick={() => selectFinancing(3)}
               />
             </div>
           </div>
