@@ -109,9 +109,8 @@ export default function EstimatorPage() {
   const [activeTool, setActiveTool] = useState<ToolId>("select");
   const [materialTab, setMaterialTab] = useState<MaterialTab>("shingle");
   const [editLayout, setEditLayout] = useState(false);
-  // const [leaveTarget, setLeaveTarget] = useState<string | null>(null);
   const [panelPositions, setPanelPositions] = useState<Record<string, PanelPos>>(loadPositions);
-  // const [credits, setCredits] = useState("");
+  const [, setCredits] = useState("");
   const [estimate, setEstimate] = useState<BackendEstimate | null>(null);
 
   useEffect(() => {
@@ -203,26 +202,6 @@ export default function EstimatorPage() {
       </div>
 
       {/* ============================================================ */}
-      {/*  Hover callout                                                */}
-      {/* ============================================================ */}
-      {hovered && ROOF_META[hovered] && (
-        <div
-          className="absolute z-50 pointer-events-none"
-          style={{ top: 60, left: "50%", transform: "translateX(-50%)" }}
-        >
-          <div className="bg-white/90 backdrop-blur-xl rounded-lg px-3.5 py-2 shadow-[0_4px_16px_rgba(0,0,0,0.12)] flex items-center gap-2.5">
-            <span className="text-[12px] font-semibold text-ink font-mono">
-              {ROOF_META[hovered].label}
-            </span>
-            <span className="w-px h-3.5 bg-hair-2" />
-            <span className="text-[11px] text-muted font-mono">
-              {ROOF_META[hovered].area} sf
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* ============================================================ */}
       {/*  1. Top nav                                                   */}
       {/* ============================================================ */}
       <div className="absolute top-5 left-1/2 -translate-x-1/2 z-40">
@@ -259,7 +238,7 @@ export default function EstimatorPage() {
           {/* Step crumbs */}
           <div className="flex items-center gap-1">
             {STEPS.map((step) => (
-              <button key={step.n} onClick={() => step.path !== "/estimator" && setLeaveTarget(step.path)}
+              <button key={step.n} onClick={() => step.path !== "/estimator" && navigate(step.path)}
                 className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-mono font-semibold transition-colors cursor-pointer border-none hover:bg-white/10 ${step.status === "current" ? "bg-blue/25 text-blue-bright" : step.status === "done" ? "bg-transparent text-white/80" : "bg-transparent text-white/45"}`}>
                 {step.status === "done" ? (
                   <span className="material-symbols-rounded text-[16px] text-green">check_circle</span>
@@ -276,11 +255,11 @@ export default function EstimatorPage() {
               <span className="material-symbols-rounded text-[20px]">save</span>
               <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 rounded-md bg-ink text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">Save</span>
             </button>
-            <button onClick={() => setLeaveTarget("/estimates")} className="group relative w-9 h-9 flex items-center justify-center rounded-[10px] cursor-pointer border transition-colors" style={{ background: "rgba(220,60,60,0.15)", color: "#dc3c3c", borderColor: "rgba(220,60,60,0.3)" }} onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(220,60,60,0.25)"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(220,60,60,0.15)"; }}>
+            <button onClick={() => navigate("/estimates")} className="group relative w-9 h-9 flex items-center justify-center rounded-[10px] cursor-pointer border transition-colors" style={{ background: "rgba(220,60,60,0.15)", color: "#dc3c3c", borderColor: "rgba(220,60,60,0.3)" }} onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(220,60,60,0.25)"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(220,60,60,0.15)"; }}>
               <span className="material-symbols-rounded text-[20px]">cancel</span>
               <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 rounded-md bg-ink text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">Cancel</span>
             </button>
-            <button onClick={() => setLeaveTarget("/pricing")} className="group relative w-9 h-9 flex items-center justify-center bg-white text-ink border-none rounded-[10px] cursor-pointer hover:bg-white/90 transition-colors">
+            <button onClick={() => navigate("/pricing")} className="group relative w-9 h-9 flex items-center justify-center bg-white text-ink border-none rounded-[10px] cursor-pointer hover:bg-white/90 transition-colors">
               <span className="material-symbols-rounded text-[20px]">arrow_forward</span>
               <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 rounded-md bg-ink text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">Next</span>
             </button>

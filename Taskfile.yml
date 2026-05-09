@@ -8,10 +8,10 @@ tasks:
       - op run --env-file=.env -- uv run fastapi dev main.py
 
   frontend:dev:
-    desc: Run frontend Vite dev server
+    desc: Run frontend Vite dev server with secrets injected from 1Password
     dir: frontend
     cmds:
-      - pnpm dev
+      - op run --env-file=.env.local -- pnpm dev
 
   backend:build:
     desc: Build backend Docker image
