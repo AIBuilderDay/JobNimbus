@@ -2,6 +2,10 @@
 
 Conventions for the JobNimbus AI Roofing project. Every feature branch reads this first.
 
+## Working style
+
+Before each edit, say in one or two sentences **why** you're making the change — the purpose, not a description of the code. Keep it tight: "Renaming `formatted` → `formatted_address` so it matches the Geocoding API field" beats "I'll now use the Edit tool to change…". Skip narration when the edit is trivial (a typo, a one-line import).
+
 ## Project layout
 
 ```
