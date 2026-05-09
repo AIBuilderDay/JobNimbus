@@ -220,6 +220,8 @@ export default function AddressPage() {
         const result = await startEstimate(addressString);
         console.log("Backend estimate result:", result);
         sessionStorage.setItem("latest-estimate", JSON.stringify(result));
+
+        setLocation({ lat: result.lat, lng: result.lng }, result.address);
       } catch (e) {
         console.error("Failed to call backend:", e);
       }

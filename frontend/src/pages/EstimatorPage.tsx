@@ -198,7 +198,7 @@ export default function EstimatorPage() {
 
       {/* 3D Canvas */}
       <div className="absolute inset-0 z-0">
-        <Scene location={location} buildingInsights={buildingInsights} selectedIndex={selectedSegmentIndex} onSelectSegment={handleSelectSegment} onCreditsUpdate={setCredits} />
+        <Scene key={`${location?.lat ?? 0},${location?.lng ?? 0}`} location={location} buildingInsights={buildingInsights} selectedIndex={selectedSegmentIndex} onSelectSegment={handleSelectSegment} onCreditsUpdate={setCredits} />
       </div>
 
       {/* ============================================================ */}
