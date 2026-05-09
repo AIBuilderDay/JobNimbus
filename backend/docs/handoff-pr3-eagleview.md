@@ -1,11 +1,12 @@
-# Handoff PR 3 of 4 — EagleView provider + precache script (AI-27, AI-66)
+# Handoff PR 3 of 5 — EagleView provider + precache script (AI-27, AI-66)
 
 > **For a fresh Claude Code session.** This file is self-contained; you do not need any prior conversation context. Read it top-to-bottom, then act.
 >
-> **Prerequisite:** PRs 1 and 2 ([`handoff-pr1-models.md`](./handoff-pr1-models.md), [`handoff-pr2-daos.md`](./handoff-pr2-daos.md)) must be merged to `main`. Verify:
+> **Prerequisite:** PRs 1 and 2 must be merged to `main` before you start. Both handoff docs have been deleted now that they shipped — the relevant context lives in "Recent context" below. Verify:
 > ```bash
-> git log --oneline main | head -10
-> # should show AI-44 (models) and AI-43..48 (DAOs)
+> git log --oneline main | head -15
+> # should show "AI-44: pydantic models..." (PR #5, merged)
+> # and "AI-43/45/46/47/48: SQLite + DAO layer..." (PR #7 — confirm it's merged before starting)
 > ls backend/models/ backend/dao/   # both directories must exist
 > ```
 >
@@ -16,6 +17,28 @@
 The EagleView API provider (cache-first, with a mock-mode fallback) plus the precache script that fires reports for all 10 benchmark properties in parallel. **Branch:** `mckay/AI-27-66-eagleview`. **Linear:** AI-27, AI-66.
 
 This is the highest-leverage PR — once it merges, the user can run `task backend:precache` and start the 20-min wall-clock job for the test properties.
+
+## Recent context (already in `main`)
+
+- **AI-17/18** — `settings.py` + `logger.py` exist. Use `from settings import settings` and `from logger import get_logger(__name__)`.
+- **PR 0** — `services/replicate.py`, `services/image_cleanup.py`, `services/google/street_view.py`, `routers/model3d.py` already use settings + logger. `REPLICATE_API_TOKEN` is in `settings.py` and `.env.example`.
+- **PR 1 / AI-44 — pydantic models** in `backend/models/`. `Address`, `Measurement`, `RoofSegment`, `LineItem`, `Estimate`, `ViewSet`. All frozen. Pricing is `*_cents: int`. `Measurement.apply_pitch_multiplier(rise, run)` is idempotent — Solar's `stats.areaMeters2` is already slanted, so EagleView (footprint) is the one that needs it.
+- **PR 2 / AI-43..48 — SQLite + DAO layer** ([PR #7](https://github.com/AIBuilderDay/JobNimbus/pull/7)). Treat as a contract:
+  - DDL is in `backend/dao/schema.sql`; `init_db()` loads it via `executescript` and is wired into the FastAPI lifespan in `main.py`. Three tables: `properties`, `estimates`, `eagleview_cache`.
+  - **Connection helper:** `from dao.database import get_connection` — context manager, `row_factory = sqlite3.Row`, `PRAGMA foreign_keys = ON` per-connection. `_db_path()` resolves `settings.DATABASE_URL` at call time so the test fixture can monkeypatch.
+  - **EagleView cache API** (use exactly this surface in the provider) — `CachedReport` is a frozen dataclass with `address_normalized`, `job_id`, `status` (`Literal["pending","complete","failed"]`), `measurements: dict | None`, `completed_at`. **Address keys are normalized** (lowercase + collapse whitespace) inside the DAO — pass raw addresses, it handles it.
+
+    ```python
+    from dao import eagleview_cache_dao
+    eagleview_cache_dao.get(address)                    # -> CachedReport | None
+    eagleview_cache_dao.put_pending(address, job_id)    # status='pending'
+    eagleview_cache_dao.update_complete(address, raw, measurements)  # status='complete'
+    eagleview_cache_dao.update_failed(address, reason)               # status='failed'
+    ```
+
+  - **`isolated_db` fixture** in `backend/tests/conftest.py` — request it by name in any test that touches the DB; you'll get a fresh tmp_path SQLite file with `init_db()` already run.
+  - **Don't add a column** for measurements in the EagleView cache — the DAO already stores `measurements_json` and rehydrates to `dict`. The provider returns a `Measurement`, but persistence is via `dict`. Convert at the boundary.
+- **Parallel work** — [AI-68 (Replicate cache)](https://linear.app/ai-builders-hackathon/issue/AI-68) may be in flight on a separate branch. It will add its own `replicate_cache` table + DAO; does NOT touch any of your files. Safe to ignore for this PR.
 
 ## Required reading FIRST
 
@@ -369,5 +392,7 @@ After PR is open, **comment on AI-27 and AI-66 in Linear** with: shipped commit 
 After the PR is opened and the URL is shared, hand off to:
 
 **[`backend/docs/handoff-pr4-test-suite.md`](./handoff-pr4-test-suite.md)** — Hackathon-qualification test suite (AI-67). It depends on this PR being merged, AND on AI-31 (MeasurementService) being either merged or available on a branch.
+
+[`backend/docs/handoff-pr5-render-deploy.md`](./handoff-pr5-render-deploy.md) (Render deployment) is also unblocked at this point and can run in parallel with PR 4.
 
 Stop after sharing the PR URL.

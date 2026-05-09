@@ -12,15 +12,21 @@ def test_settings_loads_with_env_vars(monkeypatch):
 
 def test_defaults(monkeypatch):
     # Confirm defaults independent of the developer's local .env.
-    for var in ("ANTHROPIC_API_KEY", "EAGLEVIEW_API_KEY", "REPLICATE_API_TOKEN"):
+    for var in (
+        "ANTHROPIC_API_KEY",
+        "EAGLEVIEW_CLIENT_ID",
+        "EAGLEVIEW_CLIENT_SECRET",
+        "REPLICATE_API_TOKEN",
+    ):
         monkeypatch.delenv(var, raising=False)
 
     from settings import Settings
 
     fresh = Settings(_env_file=None)
 
-    assert fresh.EAGLEVIEW_BASE_URL == "https://api.eagleview.com"
+    assert fresh.EAGLEVIEW_BASE_URL == "https://apicenter.eagleview.com"
     assert fresh.DATABASE_URL == "sqlite:///./jobnimbus.db"
     assert fresh.LOG_LEVEL == "INFO"
-    assert fresh.EAGLEVIEW_API_KEY == ""
+    assert fresh.EAGLEVIEW_CLIENT_ID == ""
+    assert fresh.EAGLEVIEW_CLIENT_SECRET == ""
     assert fresh.ANTHROPIC_API_KEY == ""
