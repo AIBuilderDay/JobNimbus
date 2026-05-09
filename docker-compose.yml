@@ -1,0 +1,51 @@
+# Local dev compose. Brings up FastAPI backend + Vite frontend on the same
+# Docker network so the frontend's /api proxy can reach the backend by service
+# name (`http://backend:8000`).
+#
+# Run via `task up` — it wraps this with `op run --env-file=backend/.env` so
+# the `${VAR}` references below resolve from 1Password at compose-up time
+# instead of being written to disk as plain values.
+#
+# TODO: add a `db` service for SQLite (named volume mount) when we want shared
+# local persistence across `task up` cycles, or swap to Postgres if/when we
+# outgrow SQLite. For now the SQLite file lives inside the backend container
+# at /app/jobnimbus.db and is ephemeral — same as the Render deploy.
+
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: jobnimbus-backend
+    ports:
+      - "8000:8000"
+    environment:
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      EAGLEVIEW_API_KEY: ${EAGLEVIEW_API_KEY:-}
+      EAGLEVIEW_BASE_URL: ${EAGLEVIEW_BASE_URL:-https://api.eagleview.com}
+      REPLICATE_API_TOKEN: ${REPLICATE_API_TOKEN:-}
+      DATABASE_URL: ${DATABASE_URL:-sqlite:///./jobnimbus.db}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: jobnimbus-frontend
+    ports:
+      - "5173:5173"
+    env_file:
+      - ./frontend/.env.local
+    environment:
+      # Vite proxies /api/* to this URL (see frontend/vite.config.ts).
+      BACKEND_URL: http://backend:8000
+      # Hot reload over a bind mount on macOS needs polling.
+      VITE_USE_POLLING: "true"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  frontend_node_modules:

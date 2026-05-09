@@ -1,0 +1,14 @@
+node_modules
+dist
+dist-ssr
+.vite
+.turbo
+coverage
+*.log
+.env
+.env.*
+.git
+.gitignore
+.DS_Store
+Dockerfile.dev
+.dockerignore
