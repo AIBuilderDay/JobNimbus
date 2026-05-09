@@ -15,20 +15,22 @@ import GlassNav, {
 /* ------------------------------------------------------------------ */
 
 const steps = [
-  { n: 1, label: "Address" },
-  { n: 2, label: "Capture" },
-  { n: 3, label: "Facets" },
-  { n: 4, label: "Pricing" },
-  { n: 5, label: "Proposal" },
+  { n: 1, label: "Address", path: "/address" },
+  { n: 2, label: "Capture", path: "/estimator" },
+  { n: 3, label: "Facets", path: "/estimator" },
+  { n: 4, label: "Pricing", path: "/pricing" },
+  { n: 5, label: "Proposal", path: "/proposal" },
 ];
 
 function CompletedCrumbs() {
+  const nav = useNavigate();
   return (
     <div className="flex items-center gap-1.5">
       {steps.map((s) => (
-        <span
+        <button
           key={s.n}
-          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold font-mono whitespace-nowrap"
+          onClick={() => nav(s.path)}
+          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold font-mono whitespace-nowrap cursor-pointer border-none hover:opacity-80 transition-opacity"
           style={{
             background: "rgba(58,166,118,0.18)",
             color: "#6fdba6",
@@ -36,7 +38,7 @@ function CompletedCrumbs() {
           }}
         >
           &#10003; {s.label}
-        </span>
+        </button>
       ))}
     </div>
   );
