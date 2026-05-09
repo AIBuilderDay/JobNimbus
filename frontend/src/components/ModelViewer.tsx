@@ -78,13 +78,13 @@ interface Props {
   onClearSegments?: () => void;
 }
 
-export default function ModelViewer({ address, buildingInsights, onClearSegments }: Props) {
+export default function ModelViewer({ address, onClearSegments }: Props) {
   const [loading, setLoading] = useState(true);
   const [stage, setStage] = useState(LOADING_STAGES[0]);
 
   const overlayConfig = getOverlaysForAddress(address);
   const defaultRotation = overlayConfig?.rotation ?? 0;
-  const [rotationDeg, setRotationDeg] = useState(defaultRotation);
+  const [, setRotationDeg] = useState(defaultRotation);
 
   useEffect(() => {
     setRotationDeg(overlayConfig?.rotation ?? 0);
@@ -115,8 +115,6 @@ export default function ModelViewer({ address, buildingInsights, onClearSegments
       </div>
     );
   }
-
-  const showRotationSlider = !!buildingInsights?.center && !loading;
 
   return (
     <div className="w-full h-full relative" style={{ backgroundColor: "#0e1830" }}>

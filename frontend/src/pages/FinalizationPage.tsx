@@ -133,7 +133,10 @@ export default function FinalizationPage() {
   const marginDisplay = pricing ? `${pricing.margin_pct}%` : `${pricingState.marginPct}%`;
 
   const handleDownloadPdf = () => {
-    if (!lastProposalPdfBase64) return;
+    if (!lastProposalPdfBase64) {
+      navigate("/proposal");
+      return;
+    }
     const bytes = Uint8Array.from(atob(lastProposalPdfBase64), (c) => c.charCodeAt(0));
     const blob = new Blob([bytes], { type: "application/pdf" });
     const url = URL.createObjectURL(blob);
@@ -267,10 +270,9 @@ export default function FinalizationPage() {
               </button>
               <button
                 onClick={handleDownloadPdf}
-                disabled={!lastProposalPdfBase64}
-                className="py-2.5 px-4 bg-transparent text-ink border border-hair rounded-xl text-[13px] font-semibold cursor-pointer hover:bg-blue-soft/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="py-2.5 px-4 bg-transparent text-ink border border-hair rounded-xl text-[13px] font-semibold cursor-pointer hover:bg-blue-soft/40 transition-colors"
               >
-                Download PDF
+                {lastProposalPdfBase64 ? "Download PDF" : "Re-send to download"}
               </button>
               <button className="py-2.5 px-4 bg-transparent text-ink border border-hair rounded-xl text-[13px] font-semibold cursor-pointer hover:bg-blue-soft/40 transition-colors">
                 Share with crew
