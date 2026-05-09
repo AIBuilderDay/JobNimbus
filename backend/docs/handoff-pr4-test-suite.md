@@ -1,61 +1,61 @@
-# Handoff PR 4 of 4 — Hackathon-qualification test suite (AI-67)
+# Handoff PR 4 of 5 — Hackathon-qualification test suite (AI-67)
 
-> **For a fresh Claude Code session.** This file is self-contained; you do not need any prior conversation context. Read it top-to-bottom, then act.
+> **For a fresh Claude Code session.** Self-contained; you do not need prior conversation context. Read top-to-bottom, then act.
 >
-> **Prerequisite:** PRs 1, 2, 3 ([`handoff-pr1-models.md`](./handoff-pr1-models.md), [`handoff-pr2-daos.md`](./handoff-pr2-daos.md), [`handoff-pr3-eagleview.md`](./handoff-pr3-eagleview.md)) merged. Also AI-31 (MeasurementService) must be either merged to `main` OR available on a branch you can rebase onto. Verify:
-> ```bash
-> git log --oneline main | head -15
-> # should show AI-44, AI-43..48, AI-27/66, and ideally AI-31 (MeasurementService)
-> ls backend/services/measurement_service.py
-> # if missing, AI-31 hasn't shipped yet — STOP and tell the user
-> ```
->
-> When this PR is merged, this handoff is COMPLETE. There is no PR 5.
+> **Prerequisite:** PRs 1, 2, 3 ([`handoff-pr1-models.md`](./handoff-pr1-models.md), [`handoff-pr2-daos.md`](./handoff-pr2-daos.md), [`handoff-pr3-eagleview.md`](./handoff-pr3-eagleview.md)) merged. AI-31 (`MeasurementService`) helpful but not required — see "Scope shrunk" below.
+
+## Scope shrunk: this is now a Google-only validation suite
+
+**EagleView is out of the hackathon runtime path.** During PR 3 we got OAuth fully working (Okta JWT mints in 200ms against `apicenter.eagleview.com/oauth2/v1/token`), but the developer sandbox is an Apigee-mocked stub:
+
+- `PlaceOrder` returns hardcoded `report_id=47741613` for any address.
+- `GetReport` has no canned response — `400 "The response ?reportId=… does not exist!"` for every ID we tried.
+- Property Data sandbox is locked to a 1.5 sq mi bbox in Omaha, NE.
+- Production access requires a manual EagleView "Go-live Request" approval, not a credential swap.
+
+Full write-up + revival path is in [`backend/docs/eagleview-api/README.md`](./eagleview-api/README.md). The provider, DAO, and scripts are all merged and would work against prod with a base-URL swap.
+
+**Implication for AI-67:** drop the EagleView-only and reconciled scopes. Validate Google Solar's slanted area against the 5 reference values. Keep the hard guards — they're what protect us from the disqualifying bug.
 
 ## What you're shipping
 
-The permanent test suite that proves we're submitting **roof area** (not footprint) and that our totals fall within ±10% of the hackathon's reference values for ≥4 of 5 example properties. **Branch:** `mckay/AI-67-benchmark-test-suite`. **Linear:** AI-67.
+The permanent test suite that proves we're submitting **roof area** (not footprint) and that our Google Solar totals fall within ±10% of the hackathon's reference values for ≥4 of 5 example properties. **Branch:** `mckay/AI-67-benchmark-test-suite`. **Linear:** AI-67.
 
 This is the test suite that prevents us from getting **disqualified**. Treat it accordingly.
 
 ## Required reading FIRST
 
-1. [`CLAUDE.md`](/Users/mckaysnell/hackathons/JobNimbus/CLAUDE.md) — note the "Critical bug to avoid" section about roof area vs. footprint.
-2. [`backend/docs/benchmark-requirements-jobnimbus.md`](./benchmark-requirements-jobnimbus.md) — the source of truth for the 5 example references. **Read all 89 lines.**
-3. [`backend/services/measurement_service.py`](/Users/mckaysnell/hackathons/JobNimbus/backend/services/measurement_service.py) — the thing under test. Read the full `measure(address)` API.
-4. [`backend/providers/eagleview.py`](/Users/mckaysnell/hackathons/JobNimbus/backend/providers/eagleview.py) — you will mock its `get_measurements` for the Solar-only path test.
-5. [`backend/services/google/solar.py`](/Users/mckaysnell/hackathons/JobNimbus/backend/services/google/solar.py) — Eddy's. You may mock it for the EagleView-only path test. **Do NOT modify.**
-6. [`backend/dao/eagleview_cache_dao.py`](/Users/mckaysnell/hackathons/JobNimbus/backend/dao/eagleview_cache_dao.py) — for pre-seeding cache from fixture in the integration tests.
-7. [`backend/models/measurement.py`](/Users/mckaysnell/hackathons/JobNimbus/backend/models/measurement.py) — `Measurement.apply_pitch_multiplier(rise, run)`. Used in the unit tests.
-8. Pull AI-67 from Linear MCP for the historical spec.
+1. [`CLAUDE.md`](/Users/mckaysnell/hackathons/JobNimbus/CLAUDE.md) — "Critical bug to avoid" section about roof area vs. footprint.
+2. [`backend/docs/benchmark-requirements-jobnimbus.md`](./benchmark-requirements-jobnimbus.md) — source of truth for the 5 example references.
+3. [`backend/docs/eagleview-api/README.md`](./eagleview-api/README.md) — why EagleView is out and how to flip it back on if prod access lands.
+4. [`backend/services/measurement_service.py`](/Users/mckaysnell/hackathons/JobNimbus/backend/services/measurement_service.py) — the thing under test (if AI-31 has shipped). If missing, the suite calls into `services.google.solar` directly via a thin shim — see "If AI-31 hasn't shipped" below.
+5. [`backend/services/google/solar.py`](/Users/mckaysnell/hackathons/JobNimbus/backend/services/google/solar.py) — Eddy's. **Do NOT modify.** `wholeRoofStats.areaMeters2` is already slanted; do not multiply by pitch again.
+6. [`backend/models/measurement.py`](/Users/mckaysnell/hackathons/JobNimbus/backend/models/measurement.py) — `Measurement.apply_pitch_multiplier(rise, run)`. Used in the unit tests.
 
 ## Required tool usage — DO NOT SKIP
 
-- **Context7 MCP**:
-  - `pytest` — parametrized tests with `@pytest.mark.parametrize`
-  - `pytest-asyncio` — for async test functions and fixtures
-  - `respx` — for mocking httpx if any test goes deeper than the service layer
-- **Web search** — confirm latest stable `pytest`, `pytest-asyncio`, `respx`. They're already in dev deps; only update lower bounds if needed.
+- **Context7 MCP**: `pytest`, `pytest-asyncio`, `respx` (only if a test goes deeper than the service layer).
+- **Web search** — confirm latest stable `pytest`, `pytest-asyncio`. Already in dev deps; only update lower bounds if needed.
 
 ## What the test suite covers
 
-**Three "scopes" run against the same 5 example properties:**
+**One scope** against the 5 example properties:
 
 | # | Scope | Setup | Assertion |
 | - | ----- | ----- | --------- |
-| 1 | Solar-only | EagleView mocked to raise `CacheMissError` | `total_roof_area_sqft` within ±10% of Reference A or B for ≥4/5 |
-| 2 | EagleView-only | Solar mocked to return `None`; cache pre-seeded from fixture | Same ±10% bar |
-| 3 | Reconciled | Both providers live (cache pre-seeded) | EagleView wins on cache hit; final number within ±10% on ≥4/5 |
+| 1 | Solar-only | Google Geocoding + Solar live (rate-limited to once/test-run via fixture) | `total_roof_area_sqft` within ±10% of Reference A or B for ≥4/5 |
 
-**Plus four hard guards:**
+**Plus four hard guards** (these are the qualification-protecting ones):
 
-- **Roof-area-not-footprint guard** — for any test address with pitch ≥ 4:12, assert `total_roof_area_sqft > footprint_sqft × 1.05`. Footprint is computed from Solar's `wholeRoofStats.areaMeters2 × 10.7639` (Solar's roof area is slanted; for footprint we'd need the projected polygon). If the bug ever returns, this test goes red.
-- **Pitch multiplier math** — unit test asserts `Measurement(...).apply_pitch_multiplier(rise, run)` returns the right multiplier:
-  - `(4, 12)` → 1.054 (within 0.001)
+- **Roof-area-not-footprint guard** — for any pitch ≥ 4:12, assert measured `total_roof_area_sqft > footprint_sqft × 1.05`. Footprint is the projected polygon area from Solar (`wholeRoofStats` doesn't expose this directly — derive from `roofSegmentStats[*].boundingBox` if needed, or skip with a clear reason). If the bug ever returns, this goes red.
+- **Pitch multiplier math** — unit test asserts `Measurement(...).apply_pitch_multiplier(rise, run)` returns:
+  - `(4, 12)` → 1.054 ± 0.001
   - `(6, 12)` → 1.118
   - `(8, 12)` → 1.202
 - **Idempotency** — `apply_pitch_multiplier` called twice returns the same Measurement (no double multiplication).
-- **Combined-measurement helper** — when both sources hit, `combine_measurements(solar, eagleview)` returns the configurable strategy result. Test all three strategies: `"avg"`, `"max_confidence"`, `"eagleview_wins"`.
+- **Google Solar slanted-area sanity** — Solar's `wholeRoofStats.areaMeters2 × 10.7639` must equal `total_roof_area_sqft` exactly (we are not pitch-multiplying Solar's output). Asserts the conversion path doesn't accidentally wedge in a pitch factor.
+
+If AI-31 ships `combine_measurements` later, add `tests/unit/test_combine_measurements.py` in a follow-up PR. Don't block AI-67 on it.
 
 ## Reference data
 
@@ -71,58 +71,26 @@ From [`benchmark-requirements-jobnimbus.md`](./benchmark-requirements-jobnimbus.
 
 ## Files to create
 
-```
+```text
 backend/tests/fixtures/__init__.py
 backend/tests/fixtures/benchmark_references.json     # the 5-row table above as JSON
-backend/tests/fixtures/eagleview_cache_seed.json     # seed data for cache (from precache run)
-backend/tests/fixtures/__init__.py
 backend/tests/integration/__init__.py
 backend/tests/integration/test_benchmark_accuracy.py
 backend/tests/unit/__init__.py
 backend/tests/unit/test_pitch_multiplier.py
-backend/tests/unit/test_combine_measurements.py
 backend/scripts/validate_measurements.py
 ```
-
-## Files to modify
-
-If `combine_measurements` doesn't already exist on `MeasurementService` (AI-31's scope), add a stub or coordinate with whoever owns AI-31. **Do not silently expand AI-31's scope** — if the helper isn't there, comment on AI-31 in Linear and ship a small companion PR or rebase onto an AI-31 branch.
 
 ### `backend/tests/fixtures/benchmark_references.json`
 
 ```json
 {
   "examples": [
-    {
-      "address": "21106 Kenswick Meadows Ct, Humble, TX 77338",
-      "reference_a_sqft": 2443,
-      "reference_b_sqft": 2343,
-      "pitch": "6:12"
-    },
-    {
-      "address": "5914 Copper Lilly Lane, Spring, TX 77389",
-      "reference_a_sqft": 4391,
-      "reference_b_sqft": 4296,
-      "pitch": "8:12"
-    },
-    {
-      "address": "122 NW 13th Ave, Cape Coral, FL 33993",
-      "reference_a_sqft": 2917,
-      "reference_b_sqft": 2851,
-      "pitch": "6:12"
-    },
-    {
-      "address": "14132 Trenton Ave, Orland Park, IL 60462",
-      "reference_a_sqft": 2990,
-      "reference_b_sqft": 2935,
-      "pitch": "4:12"
-    },
-    {
-      "address": "835 S Cobble Creek, Nixa, MO 65714",
-      "reference_a_sqft": 3070,
-      "reference_b_sqft": 3017,
-      "pitch": "8:12"
-    }
+    {"address": "21106 Kenswick Meadows Ct, Humble, TX 77338", "reference_a_sqft": 2443, "reference_b_sqft": 2343, "pitch": "6:12"},
+    {"address": "5914 Copper Lilly Lane, Spring, TX 77389",    "reference_a_sqft": 4391, "reference_b_sqft": 4296, "pitch": "8:12"},
+    {"address": "122 NW 13th Ave, Cape Coral, FL 33993",       "reference_a_sqft": 2917, "reference_b_sqft": 2851, "pitch": "6:12"},
+    {"address": "14132 Trenton Ave, Orland Park, IL 60462",    "reference_a_sqft": 2990, "reference_b_sqft": 2935, "pitch": "4:12"},
+    {"address": "835 S Cobble Creek, Nixa, MO 65714",          "reference_a_sqft": 3070, "reference_b_sqft": 3017, "pitch": "8:12"}
   ],
   "test_properties": [
     {"address": "3561 E 102nd Ct, Thornton, CO 80229"},
@@ -134,43 +102,23 @@ If `combine_measurements` doesn't already exist on `MeasurementService` (AI-31's
 }
 ```
 
-This is the single source of truth for the references. Both the integration test and the `validate_measurements.py` CLI load from it.
-
-### `backend/tests/fixtures/eagleview_cache_seed.json`
-
-Seed data for the integration tests (so they don't make 20-min EagleView calls in CI). Generated once from a real precache run by exporting `eagleview_cache.measurements_json` for the 5 example properties:
-
-```bash
-sqlite3 backend/jobnimbus.db <<'SQL'
-.headers on
-.mode json
-SELECT address_normalized, measurements_json
-FROM eagleview_cache
-WHERE status = 'complete';
-SQL
-```
-
-If the precache hasn't run yet (or you don't have access), populate this with **representative hand-crafted Measurement dicts** that match the reference values within ±5%. Mark them in a comment as "synthetic" so they're regenerated from real data later.
+Single source of truth — both the integration test and `validate_measurements.py` load from this.
 
 ### `backend/tests/integration/test_benchmark_accuracy.py`
 
-Pseudo-code:
+Live network test (Geocoding + Solar). Skip in CI if `GOOGLE_MAPS_API_KEY` is unset; run locally via `task backend:test`.
 
 ```python
 import json
 from pathlib import Path
 
 import pytest
-from unittest.mock import AsyncMock
 
-from dao import eagleview_cache_dao
-from providers.eagleview import CacheMissError
-# from services.measurement_service import MeasurementService  # from AI-31
-
-REFERENCES = json.loads((Path(__file__).parent.parent / "fixtures" / "benchmark_references.json").read_text())
-SEED = json.loads((Path(__file__).parent.parent / "fixtures" / "eagleview_cache_seed.json").read_text())
-TOLERANCE = 0.10  # ±10%
-PASS_THRESHOLD = 4  # ≥4 of 5 must pass
+REFERENCES = json.loads(
+    (Path(__file__).parent.parent / "fixtures" / "benchmark_references.json").read_text()
+)
+TOLERANCE = 0.10
+PASS_THRESHOLD = 4
 
 
 def _within_tolerance(actual: float, ref_a: float, ref_b: float) -> bool:
@@ -180,45 +128,20 @@ def _within_tolerance(actual: float, ref_a: float, ref_b: float) -> bool:
     )
 
 
-@pytest.fixture
-def seeded_cache(isolated_db):
-    """Pre-load eagleview_cache with the 5 example properties from seed JSON."""
-    for entry in SEED:
-        eagleview_cache_dao.update_complete(
-            entry["address"], raw={}, measurements=entry["measurements"]
-        )
-    yield
-
-
 @pytest.mark.asyncio
-async def test_solar_only_path(isolated_db, monkeypatch):
-    # Mock EagleView provider to always raise CacheMissError
-    # Run MeasurementService.measure() against each of the 5 example properties
-    # Count how many fall within ±10% of either reference
-    # Assert count >= PASS_THRESHOLD
+@pytest.mark.integration
+async def test_solar_path_meets_threshold():
+    # For each example: measure() → check ±10% of either reference
+    # Assert pass_count >= PASS_THRESHOLD
     ...
 
 
 @pytest.mark.asyncio
-async def test_eagleview_only_path(seeded_cache, monkeypatch):
-    # Mock Solar provider to return None
-    # MeasurementService.measure() pulls from cache
-    ...
-
-
-@pytest.mark.asyncio
-async def test_reconciled_path(seeded_cache):
-    # Both providers live
-    # Assert EagleView wins on cache hit (source == "eagleview")
-    # Assert ±10% on ≥4/5
-    ...
-
-
-@pytest.mark.asyncio
+@pytest.mark.integration
 @pytest.mark.parametrize("entry", REFERENCES["examples"])
-async def test_roof_area_not_footprint_guard(entry, seeded_cache):
-    # For any pitch >= 4:12, assert measured_sqft > footprint_sqft * 1.05
-    # If footprint can't be computed, skip with a clear reason
+async def test_roof_area_not_footprint_guard(entry):
+    # For any pitch >= 4:12, assert measured_sqft > footprint_sqft * 1.05.
+    # If footprint can't be computed from Solar's response, skip with reason.
     ...
 ```
 
@@ -254,37 +177,13 @@ def test_idempotent():
     m1 = _stub().apply_pitch_multiplier(6, 12)
     m2 = m1.apply_pitch_multiplier(6, 12)
     assert m1 == m2
-    assert m2.pitch_multiplier_applied == m1.pitch_multiplier_applied
-```
-
-### `backend/tests/unit/test_combine_measurements.py`
-
-If `combine_measurements` exists in MeasurementService:
-
-```python
-import pytest
-
-# from services.measurement_service import combine_measurements
-
-def _solar(area: float) -> Measurement: ...
-def _eagleview(area: float) -> Measurement: ...
-
-
-@pytest.mark.parametrize("strategy,expected", [
-    ("avg",            (1000 + 1100) / 2),
-    ("max_confidence", 1100),  # eagleview is canonically more accurate
-    ("eagleview_wins", 1100),
-])
-def test_combine_strategies(strategy, expected):
-    out = combine_measurements(_solar(1000), _eagleview(1100), strategy=strategy)
-    assert out.total_roof_area_sqft == expected
 ```
 
 ### `backend/scripts/validate_measurements.py`
 
-CLI version of the integration test for pre-submission gut-check. Prints a comparison table:
+CLI version of the integration test. Pre-submission gut-check.
 
-```
+```text
 Address                                          Measured  Ref A   Δ A     Ref B   Δ B     Status
 21106 Kenswick Meadows Ct, Humble, TX 77338      2,401     2,443   -1.7%   2,343    +2.5%   ✓
 5914 Copper Lilly Lane, Spring, TX 77389         4,250     4,391   -3.2%   4,296    -1.1%   ✓
@@ -295,7 +194,7 @@ PASS: 5/5 within ±10%
 Skeleton:
 
 ```python
-"""Run MeasurementService against the 5 example properties and print a diff table.
+"""Run the Google Solar measurement path against the 5 example properties and print a diff table.
 
 Run: cd backend && uv run python -m scripts.validate_measurements
 """
@@ -303,8 +202,6 @@ import asyncio
 import json
 import sys
 from pathlib import Path
-
-# from services.measurement_service import MeasurementService
 
 REFERENCES = json.loads(
     (Path(__file__).parent.parent / "tests/fixtures/benchmark_references.json").read_text()
@@ -315,7 +212,6 @@ async def main() -> int:
     pass_count = 0
     print(f"{'Address':<55}{'Measured':>10}{'Ref A':>8}{'Δ A':>8}{'Ref B':>8}{'Δ B':>8}  Status")
     for entry in REFERENCES["examples"]:
-        # measure each, print row, increment pass_count if within tolerance
         ...
     print(f"{pass_count}/{len(REFERENCES['examples'])} within ±10%")
     return 0 if pass_count >= 4 else 1
@@ -325,67 +221,90 @@ if __name__ == "__main__":
     sys.exit(asyncio.run(main()))
 ```
 
-Also add to `Taskfile.yml`:
+Add to `Taskfile.yml`:
 
 ```yaml
   backend:validate:
-    desc: Run measurement validation against the 5 example properties
+    desc: Run measurement validation against the 5 example properties (live Google APIs)
     dir: backend
     cmds:
       - op run --env-file=.env -- uv run python -m scripts.validate_measurements
 ```
 
+## If AI-31 hasn't shipped yet
+
+If `backend/services/measurement_service.py` is missing, the integration test and CLI can call `services.google.solar.get_solar_data(lat, lng)` directly via a small shim:
+
+```python
+async def _measure(address: str) -> float:
+    coords = await geocode(address)
+    solar = await get_solar_data(coords.lat, coords.lng)
+    return solar.whole_roof_stats.area_meters2 * 10.7639  # m² → ft², slanted
+```
+
+When `MeasurementService.measure()` lands, swap the shim out and delete it.
+
 ## Verify
 
 ```bash
 cd backend && uv run pytest tests/unit/ -v
-cd backend && uv run pytest tests/integration/ -v
-cd backend && uv run pytest tests/ -v   # full suite green
-cd backend && uv run python -m scripts.validate_measurements
+cd backend && uv run pytest tests/integration/ -v -m integration   # needs GOOGLE_MAPS_API_KEY
+cd backend && uv run python -m scripts.validate_measurements        # full live run
 ```
 
-The full suite finishes in **<10s** if the EagleView fixture is well-formed (no real network calls).
+Unit suite finishes in <1s. Integration suite hits live Google APIs — expect 5-10s for the 5 addresses.
 
 ## Commit + PR
 
 ```bash
 git checkout -b mckay/AI-67-benchmark-test-suite
-git add backend/tests/ backend/scripts/validate_measurements.py Taskfile.yml
-git commit -m "AI-67: hackathon-qualification test suite (sqft accuracy + roof-area guard)"
+git add backend/tests/ backend/scripts/validate_measurements.py Taskfile.yml backend/docs/
+git commit -m "AI-67: hackathon-qualification test suite (Google Solar accuracy + roof-area guard)"
 git push -u origin mckay/AI-67-benchmark-test-suite
 gh pr create --title "AI-67: hackathon-qualification test suite" --body "..."
 ```
 
 PR body covers:
-- Three scope tests: Solar-only / EagleView-only / Reconciled (each ±10% on ≥4/5)
+
+- Single Solar-path scope (±10% on ≥4/5 example properties)
 - Roof-area-not-footprint hard guard
 - Pitch multiplier unit tests + idempotency
-- `combine_measurements` strategy unit tests
+- Google Solar slanted-area sanity check
 - `validate_measurements.py` CLI for pre-submission gut-check
 - Reference data lives in a single JSON fixture used by both the integration test and the CLI
+- **Note in body:** EagleView path deferred — sandbox is mock-only; revival path documented in [`backend/docs/eagleview-api/README.md`](./eagleview-api/README.md).
 
-After PR is open, **comment on AI-67 in Linear** with the actual pass/fail rate from the suite (e.g. "5/5 within ±10%, 4/5 within ±5%, roof-area guard green for all 5").
+Comment on AI-67 in Linear with the actual pass/fail rate (e.g. "5/5 within ±10%, 4/5 within ±5%, roof-area guard green for all 5").
+
+## What's next after this PR (and what we *could* do)
+
+**On the hackathon critical path:**
+
+1. Run `task backend:validate` against the 5 examples — confirm ≥4/5 pass ±10%. If we fall short, the most likely fix is `predominant_pitch` parsing (Solar reports it per-segment; we need to pick the dominant one before any downstream consumer multiplies).
+2. PR 5 ([`handoff-pr5-render-deploy.md`](./handoff-pr5-render-deploy.md)) — Render deployment.
+3. Submit the 5 test-property totals via the form in `backend/docs/SUBMISSION.md`.
+
+**Nice-to-haves if there's time (in priority order):**
+
+- **Pitch-overrideable reconciliation** — let users supply a measured pitch on the property form; if present, override Solar's primary pitch before multiplication. Solar's pitch resolution is ±5°; a hand measurement is tighter on edge cases.
+- **`combine_measurements` strategies** (AI-31 followup) — if AI-31 ships `avg` / `max_confidence` / `eagleview_wins`, add the unit test stub from the previous version of this doc.
+- **EagleView prod revival** — if EagleView approves the production app during the event, follow the steps in [`backend/docs/eagleview-api/README.md`](./eagleview-api/README.md) to flip it on. Add the EagleView-only and reconciled scopes back into this suite as a follow-up PR.
+- **Static Maps overlay screenshot in the validation CLI** — drop a debug PNG per address showing the Solar polygon. Helpful for spotting addresses where Solar misclassifies the structure.
 
 ## Don'ts
 
 - Do NOT use `os.environ` outside `settings.py`.
-- Do NOT use `print()` outside the `validate_measurements.py` CLI script (where it's the actual output).
+- Do NOT use `print()` outside the `validate_measurements.py` CLI script.
 - Do NOT modify `backend/services/google/*` or `backend/routers/estimate.py`.
-- Do NOT make live EagleView calls in any test — always use the seed fixture.
-- Do NOT silently expand AI-31's scope. If `combine_measurements` is missing, comment on AI-31 first.
+- Do NOT silently expand AI-31's scope. If `combine_measurements` is missing, defer to a follow-up PR.
 - Do NOT skip pre-commit hooks.
 - Do NOT `git push --force`.
-- Do NOT commit fixture data containing PII (addresses are public; redact account names / tokens / customer info from any real EagleView responses).
+- Do NOT re-introduce EagleView calls in the runtime measurement path until the prod revival steps in `eagleview-api/README.md` are complete.
 
 ## When done
 
-This is the last PR in the EagleView pipeline.
+After this merges, tell the user:
 
-After it merges, tell the user:
-
-> "All four PRs (AI-44 models, AI-43..48 DAOs, AI-27/66 EagleView, AI-67 test suite) are merged. Next:
-> 1. Run `task backend:precache` (~20 min wall-clock) to populate `eagleview_cache` with the 5 test properties
-> 2. Run `task backend:validate` to confirm the 5 example properties pass ±10%
-> 3. Submit the 5 test-property totals via the form in `backend/docs/SUBMISSION.md`"
+> "AI-67 merged. Run `task backend:validate` to print the live ±10% table for the 5 example properties. If 5/5 are green, submit. If <4 pass, the most likely culprit is pitch parsing — see `services/google/solar.py` and the `predominant_pitch` derivation."
 
 Stop.

@@ -6,8 +6,9 @@ class Settings(BaseSettings):
 
     GOOGLE_MAPS_API_KEY: str
     ANTHROPIC_API_KEY: str = ""
-    EAGLEVIEW_API_KEY: str = ""
-    EAGLEVIEW_BASE_URL: str = "https://api.eagleview.com"
+    EAGLEVIEW_CLIENT_ID: str = ""
+    EAGLEVIEW_CLIENT_SECRET: str = ""
+    EAGLEVIEW_BASE_URL: str = "https://apicenter.eagleview.com"
     REPLICATE_API_TOKEN: str = ""
 
     DATABASE_URL: str = "sqlite:///./jobnimbus.db"

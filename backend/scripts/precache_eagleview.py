@@ -1,5 +1,10 @@
 """Fire EagleView reports for all 10 benchmark properties in parallel.
 
+Status (2026-05-09): non-functional against the developer sandbox (the
+sandbox PlaceOrder is canned and GetReport has no stubs). Kept as the
+day-1 warmup script for the prod revival path documented in
+backend/docs/eagleview-api/README.md.
+
 Run once at hackathon start. Polls every 60s until all addresses are
 complete or any fails. Total wall-clock ~20 minutes.
 
@@ -16,24 +21,12 @@ from dao import eagleview_cache_dao
 from dao.database import init_db
 from logger import get_logger
 from providers.eagleview import EagleViewError, EagleViewProvider
+from scripts.benchmark_addresses import ALL_ADDRESSES
 
 log = get_logger(__name__)
 
 
-ADDRESSES = [
-    # Examples (calibration only — not scored)
-    "21106 Kenswick Meadows Ct, Humble, TX 77338",
-    "5914 Copper Lilly Lane, Spring, TX 77389",
-    "122 NW 13th Ave, Cape Coral, FL 33993",
-    "14132 Trenton Ave, Orland Park, IL 60462",
-    "835 S Cobble Creek, Nixa, MO 65714",
-    # Test (submitted)
-    "3561 E 102nd Ct, Thornton, CO 80229",
-    "1612 S Canton Ave, Springfield, MO 65802",
-    "6310 Laguna Bay Court, Houston, TX 77041",
-    "3820 E Rosebrier St, Springfield, MO 65809",
-    "1261 20th Street, Newport News, VA 23607",
-]
+ADDRESSES = ALL_ADDRESSES
 
 
 POLL_INTERVAL_SECONDS = 60

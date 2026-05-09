@@ -93,6 +93,18 @@ tasks:
     cmds:
       - op run --env-file=.env -- uv run python -m scripts.precache_eagleview
 
+  backend:eagleview-dump:
+    desc: One-shot — submit, poll, and dump the raw EagleView sandbox response for ONE address. Pass with `-- "your address"`.
+    dir: backend
+    cmds:
+      - op run --env-file=.env -- uv run python -m scripts.dump_eagleview_payload {{.CLI_ARGS}}
+
+  backend:eagleview-probe:
+    desc: Submit ALL 10 benchmark addresses to EagleView sandbox and report which it accepts (no polling, fast)
+    dir: backend
+    cmds:
+      - op run --env-file=.env -- uv run python -m scripts.probe_benchmark_addresses
+
   frontend:dev:
     desc: Run frontend Vite dev server with secrets injected from 1Password
     dir: frontend
@@ -112,7 +124,7 @@ tasks:
       - docker stop jobnimbus-backend 2>/dev/null || true
       - docker rm jobnimbus-backend 2>/dev/null || true
       - docker build --no-cache -t jobnimbus-backend .
-      - op run --env-file=.env -- docker run -d -p 8000:8000 -e GOOGLE_MAPS_API_KEY -e ANTHROPIC_API_KEY -e REPLICATE_API_TOKEN --name jobnimbus-backend jobnimbus-backend
+      - op run --env-file=.env -- docker run -d -p 8000:8000 -e GOOGLE_MAPS_API_KEY -e ANTHROPIC_API_KEY -e REPLICATE_API_TOKEN -e EAGLEVIEW_CLIENT_ID -e EAGLEVIEW_CLIENT_SECRET -e EAGLEVIEW_BASE_URL --name jobnimbus-backend jobnimbus-backend
 
   backend:down:
     desc: Stop backend container

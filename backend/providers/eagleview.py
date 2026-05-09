@@ -1,40 +1,44 @@
-"""EagleView Reports API wrapper.
+"""EagleView Measurement Orders API wrapper.
 
-Docs (consulted, gated content — full schemas need a logged-in dev account):
-  - https://developer.eagleview.com/documentation/measurement-orders/v1/overview
-  - https://developer.eagleview.com/user-guides/developer-guides/authentication-methods
-  - https://restdoc.eagleview.com/
+Status (2026-05-09): scaffolding only — NOT in the runtime measurement path.
+OAuth works against prod (`apicenter.eagleview.com/oauth2/v1/token` mints a
+real Okta JWT), but the developer sandbox is an Apigee-canned stub:
+PlaceOrder hardcodes `report_id=47741613` for any address, GetReport returns
+"does not exist!" for every ID. Production access requires EagleView's
+manual "Go-live Request" approval. Full write-up + revival steps:
+backend/docs/eagleview-api/README.md.
 
-API surface (best understanding from the docs above + public Postman collections):
-  Auth:    OAuth2 / Bearer token in the `Authorization` header.
-           Public docs describe a client-credentials grant against
-           POST {base}/auth-service/v1/token. We use a long-lived bearer
-           token (settings.EAGLEVIEW_API_KEY) for the hackathon — if that
-           proves to be a client_id+secret pair instead, swap _headers()
-           to mint a token first.
-  Submit:  POST {base}/v2/Order/PlaceOrder
-           Body shape and response field for the report id are NOT yet
-           validated against a real account. Field names below are marked
-           with TODO(eagleview-live).
-  Status:  GET  {base}/v2/Order/GetOrderStatus?reportId=<id>
-           Status strings observed in public docs: "Pending", "InProgress",
-           "Completed", "Cancelled", "Rejected". _map_status collapses
-           those to our 3-value Literal.
-  Fetch:   GET  {base}/v2/Order/GetReport?reportId=<id>
-           Returns the measurement payload. Field names below are marked
-           with TODO(eagleview-live).
+Docs (source: https://developer.eagleview.com/documentation/measurement-orders/v1):
+  Token endpoint: POST https://apicenter.eagleview.com/oauth2/v1/token
+                  (always production host — sandbox API auth tokens are
+                  minted from the same auth server)
+  Sandbox base:   https://sandbox.apicenter.eagleview.com
+  Production base: https://apicenter.eagleview.com
 
-Cache contract:
-  All cache reads/writes go through dao.eagleview_cache_dao. Address
-  normalization (lowercase + collapsed whitespace) lives in the DAO — we
-  pass raw addresses through.
+  PlaceOrder:  POST {base}/v2/Order/PlaceOrder
+               Returns {"OrderId": int, "ReportIds": [int, ...]}
+  GetReport:   GET  {base}/v3/Report/GetReport?reportId=<int>
+               Returns the full report including status. We use this for
+               BOTH polling (read .StatusId / .Status) and final fetch
+               (read .TotalMeasurements.*). One endpoint, two purposes —
+               there is no separate GetOrderStatus in the v3 surface.
+
+Authentication:
+  OAuth2 client_credentials grant. POST client_id+secret (HTTP Basic) +
+  body `grant_type=client_credentials` to the token endpoint, get back
+  {access_token, expires_in (24h), refresh_token (30d), token_type}.
+  We mint lazily and cache in-process for the lifetime of the provider
+  instance, refreshing 30s before expiry.
 
 Mock mode:
-  Auto-engages when settings.EAGLEVIEW_API_KEY is empty. Returns a
-  deterministic Measurement keyed off the address so unit tests + offline
-  development still exercise the cache plumbing end-to-end.
+  Auto-engages when EAGLEVIEW_CLIENT_ID or EAGLEVIEW_CLIENT_SECRET is
+  missing. Returns a deterministic Measurement keyed off the address so
+  unit tests + offline development still exercise the cache plumbing
+  end-to-end.
 """
 
+import re
+import time
 from typing import Literal
 
 import httpx
@@ -47,10 +51,19 @@ from settings import settings
 log = get_logger(__name__)
 
 
-# TODO(eagleview-live): confirm against a real account.
+# Token is always minted off the production auth host, regardless of
+# whether we're calling the sandbox or production API base.
+_TOKEN_URL = "https://apicenter.eagleview.com/oauth2/v1/token"
 _SUBMIT_PATH = "/v2/Order/PlaceOrder"
-_STATUS_PATH = "/v2/Order/GetOrderStatus"
-_FETCH_PATH = "/v2/Order/GetReport"
+_FETCH_PATH = "/v3/Report/GetReport"
+
+# Premium - Residential. Full 3D roof report with line-item measurements.
+# Source: developer.eagleview.com /api-documentation > PrimaryProductId.
+_PRIMARY_PRODUCT_ID_PREMIUM_RESIDENTIAL = 31
+
+# Refresh ~30s before actual expiry to avoid sending a token that dies
+# mid-request.
+_TOKEN_REFRESH_MARGIN_S = 30
 
 
 class EagleViewError(Exception):
@@ -62,22 +75,60 @@ class CacheMissError(Exception):
 
 
 class EagleViewProvider:
-    """Wraps EagleView REST API. Stateless. Cache lookup via DAO."""
+    """Wraps EagleView Measurement Orders REST API. Cache lookup via DAO.
+    Holds an in-memory OAuth2 token for the lifetime of the instance."""
 
     def __init__(self, *, mock_mode: bool | None = None):
         self.base_url = settings.EAGLEVIEW_BASE_URL.rstrip("/")
-        self.api_key = settings.EAGLEVIEW_API_KEY
-        self.mock_mode = mock_mode if mock_mode is not None else not bool(self.api_key)
+        self.client_id = settings.EAGLEVIEW_CLIENT_ID
+        self.client_secret = settings.EAGLEVIEW_CLIENT_SECRET
+        self.mock_mode = (
+            mock_mode if mock_mode is not None
+            else not (self.client_id and self.client_secret)
+        )
+        self._access_token: str | None = None
+        self._token_expires_at: float = 0.0  # epoch seconds
 
-    def _headers(self) -> dict[str, str]:
+    async def _get_access_token(self) -> str:
+        """Mint or return cached OAuth2 access token (client_credentials)."""
+        if self._access_token and time.time() < self._token_expires_at - _TOKEN_REFRESH_MARGIN_S:
+            return self._access_token
+
+        log.info("eagleview minting access token")
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    _TOKEN_URL,
+                    auth=(self.client_id, self.client_secret),
+                    data={"grant_type": "client_credentials"},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except httpx.HTTPError:
+            log.exception("eagleview token mint failed")
+            raise EagleViewError("EagleView authentication failed")
+
+        token = data.get("access_token")
+        if not token:
+            log.error("eagleview token response missing access_token keys=%s", list(data.keys()))
+            raise EagleViewError("EagleView token response missing access_token")
+        expires_in = int(data.get("expires_in") or 86400)
+
+        self._access_token = token
+        self._token_expires_at = time.time() + expires_in
+        return token
+
+    async def _headers(self) -> dict[str, str]:
+        token = await self._get_access_token()
         return {
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {token}",
             "Accept": "application/json",
             "Content-Type": "application/json",
         }
 
     async def request_report(self, address: str) -> str:
-        """Submit a report job. Returns job_id. Idempotent on address."""
+        """Submit a report job. Returns report_id (stringified). Idempotent
+        on address — re-calls return the same id from cache."""
         existing = eagleview_cache_dao.get(address)
         if existing and existing.job_id:
             log.info(
@@ -97,7 +148,7 @@ class EagleViewProvider:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(
                     f"{self.base_url}{_SUBMIT_PATH}",
-                    headers=self._headers(),
+                    headers=await self._headers(),
                     json=_build_submit_payload(address),
                 )
                 resp.raise_for_status()
@@ -106,59 +157,59 @@ class EagleViewProvider:
             log.exception("eagleview request_report failed address=%s", address)
             raise EagleViewError(f"EagleView submission failed for {address}")
 
-        # TODO(eagleview-live): confirm field name. PlaceOrder responses in
-        # public examples have used both `ReportId` and `OrderId`.
-        job_id = str(data.get("ReportId") or data.get("OrderId") or "")
-        if not job_id:
-            log.error("eagleview request_report missing id in response keys=%s", list(data.keys()))
+        # PlaceOrder returns {"OrderId": int, "ReportIds": [int, ...]}.
+        # We track the first report id since each PlaceOrder produces one
+        # measurement report (additional ids would be add-ons).
+        report_ids = data.get("ReportIds") or []
+        report_id = report_ids[0] if report_ids else data.get("OrderId")
+        if not report_id:
+            log.error("eagleview request_report missing id keys=%s", list(data.keys()))
             raise EagleViewError(f"EagleView response missing report id for {address}")
 
+        job_id = str(report_id)
         eagleview_cache_dao.put_pending(address, job_id)
         return job_id
 
     async def get_report_status(self, job_id: str) -> Literal["pending", "complete", "failed"]:
+        """Poll status. Single-source: hits GetReport and reads its status
+        fields. EagleView v3 has no separate GetOrderStatus — GetReport
+        returns the status itself, plus the measurements once complete."""
         if self.mock_mode:
             return "complete"
 
-        log.info("eagleview get_report_status job_id=%s", job_id)
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(
-                    f"{self.base_url}{_STATUS_PATH}",
-                    headers=self._headers(),
-                    params={"reportId": job_id},
-                )
-                resp.raise_for_status()
-                data = resp.json()
-        except httpx.HTTPError:
-            log.exception("eagleview get_report_status failed job_id=%s", job_id)
-            raise EagleViewError(f"EagleView status check failed for {job_id}")
-
-        # TODO(eagleview-live): confirm field name (`Status` vs `OrderStatus`).
-        raw_status = str(data.get("Status") or data.get("OrderStatus") or "")
+        data = await self._fetch_report_payload(job_id)
+        # The Status field is the human-readable string ("In Progress",
+        # "Completed"). DisplayStatus is similar but UI-formatted.
+        raw_status = str(data.get("Status") or data.get("DisplayStatus") or "")
         return _map_status(raw_status)
 
     async def fetch_report(self, job_id: str) -> Measurement:
         """Fetch completed report and translate to our Measurement model.
-        Raises EagleViewError if not complete."""
+        Caller is responsible for checking status first — we don't re-check
+        here, so calling fetch_report on an in-flight order may yield an
+        empty Measurement (zeroed line items)."""
         if self.mock_mode:
             return _mock_measurement(job_id)
 
-        log.info("eagleview fetch_report job_id=%s", job_id)
+        data = await self._fetch_report_payload(job_id)
+        return _translate_eagleview_response(data)
+
+    async def _fetch_report_payload(self, job_id: str) -> dict:
+        """Shared GET /v3/Report/GetReport — used by both status polling
+        and final fetch."""
+        log.info("eagleview GetReport job_id=%s", job_id)
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.get(
                     f"{self.base_url}{_FETCH_PATH}",
-                    headers=self._headers(),
+                    headers=await self._headers(),
                     params={"reportId": job_id},
                 )
                 resp.raise_for_status()
-                data = resp.json()
+                return resp.json()
         except httpx.HTTPError:
-            log.exception("eagleview fetch_report failed job_id=%s", job_id)
-            raise EagleViewError(f"EagleView fetch failed for {job_id}")
-
-        return _translate_eagleview_response(data)
+            log.exception("eagleview GetReport failed job_id=%s", job_id)
+            raise EagleViewError(f"EagleView GetReport failed for {job_id}")
 
     async def get_measurements(self, address: str) -> Measurement:
         """Cache-first lookup.
@@ -180,58 +231,123 @@ class EagleViewProvider:
 
 
 def _build_submit_payload(address: str) -> dict:
-    """Body for PlaceOrder. Real EagleView payloads expect parsed address
-    components (street, city, state, zip) plus a product/report-type code.
-    For now we send a single-line address; once we have a sandbox account
-    we'll parse the address before submission."""
-    # TODO(eagleview-live): split address into components and add the
-    # correct product code (Premium Residential measurement report).
+    """Body for PlaceOrder. EagleView wants address parts (street/city/
+    state/zip) + a PrimaryProductId integer. We parse a single-line
+    address for hackathon convenience; in prod we'd carry the structured
+    address from the geocoder through."""
+    parts = _parse_address(address)
     return {
-        "Address": address,
-        "ReportType": "PremiumResidential",
+        "OrderReports": {
+            "ReportAddresses": {
+                "Address": parts["street"],
+                "City": parts["city"],
+                "State": parts["state"],
+                "Zip": parts["zip"],
+                "Country": "USA",
+            },
+            "PrimaryProductId": _PRIMARY_PRODUCT_ID_PREMIUM_RESIDENTIAL,
+        }
     }
 
 
+def _parse_address(addr: str) -> dict[str, str]:
+    """Best-effort split of "Street, City, State ZIP" into parts.
+    Tolerant of extra commas or missing zip — anything we can't parse
+    becomes empty string and EagleView will reject it explicitly, which
+    is better than silently sending garbage."""
+    parts = [p.strip() for p in addr.split(",")]
+    street = parts[0] if parts else ""
+    city = parts[1] if len(parts) > 1 else ""
+    state = ""
+    zip_code = ""
+    if len(parts) > 2:
+        # "TX 77338" or "TX  77338-1234"
+        m = re.match(r"^\s*([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)\s*$", parts[2])
+        if m:
+            state, zip_code = m.group(1), m.group(2)
+        else:
+            state = parts[2]
+    return {"street": street, "city": city, "state": state, "zip": zip_code}
+
+
 def _map_status(raw: str) -> Literal["pending", "complete", "failed"]:
-    """Map EagleView status strings to our 3-value Literal.
-    Unknown statuses default to 'pending' and log a warning so we can
-    discover new values without erroring out a precache run."""
+    """Map EagleView status strings (Status / DisplayStatus on GetReport)
+    to our 3-value Literal. Unknown statuses default to 'pending' and log
+    a warning so we can discover new values without erroring out a
+    precache run."""
     normalized = raw.strip().lower()
     if normalized in {"completed", "complete", "delivered", "ready"}:
         return "complete"
     if normalized in {"cancelled", "canceled", "rejected", "failed", "error"}:
         return "failed"
-    if normalized in {"pending", "inprogress", "in_progress", "in progress", "processing", "submitted", "queued"}:
+    if normalized in {
+        "pending", "inprogress", "in_progress", "in progress",
+        "processing", "submitted", "queued", "new", "ordered",
+    }:
         return "pending"
     log.warning("eagleview unknown status mapped to pending raw=%s", raw)
     return "pending"
 
 
+def _to_float(value: object) -> float:
+    """EagleView mixes strings and numbers in measurement fields.
+    Accept either; default missing/unparseable to 0.0 so a partial
+    payload doesn't crash cache writes."""
+    if value is None:
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        cleaned = value.replace(",", "").strip()
+        if not cleaned:
+            return 0.0
+        try:
+            return float(cleaned)
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
 def _translate_eagleview_response(data: dict) -> Measurement:
-    """Extract our Measurement fields from the EagleView payload.
-    All field names below are TODO(eagleview-live) until validated against
-    a real report. Defaults are conservative: missing line items become 0
-    rather than failing validation."""
-    address = str(data.get("Address") or data.get("PropertyAddress") or "")
-    total_area = float(data.get("TotalRoofArea") or data.get("TotalArea") or 0.0)
-    pitch = str(data.get("PredominantPitch") or data.get("Pitch") or "0:12")
+    """Extract our Measurement fields from a GetReport payload.
+    Field names follow the v1 docs schema (TotalMeasurements.*) with
+    fallbacks to top-level fields, since some report variants flatten."""
+    totals = data.get("TotalMeasurements") or {}
+
+    address_parts = [
+        str(data.get("Street") or ""),
+        str(data.get("City") or ""),
+        str(data.get("State") or ""),
+        str(data.get("Zip") or ""),
+    ]
+    address = ", ".join(p for p in address_parts if p).strip(", ")
+
+    # AreaValue (numeric) is preferred; Area (string with units) is the
+    # fallback. Same pattern for pitch.
+    total_area = _to_float(totals.get("AreaValue") or totals.get("Area") or data.get("Area"))
+    pitch_str = (
+        totals.get("PrimaryPitch")
+        or data.get("Pitch")
+        or data.get("PrimaryPitch")
+        or "0:12"
+    )
 
     return Measurement(
         address=address,
         total_roof_area_sqft=total_area,
-        predominant_pitch=pitch,
-        # EagleView reports total roof area as the slanted (already-pitched)
-        # value, so no multiplier needed downstream — leave at the default 1.0.
+        predominant_pitch=str(pitch_str),
+        # EagleView's Area is the slanted (already-pitched) roof surface
+        # area, so no multiplier needed downstream.
         pitch_multiplier_applied=1.0,
         source="eagleview",
         sources_consulted=["eagleview"],
-        ridge_lf=float(data.get("RidgeLength") or data.get("Ridges") or 0.0),
-        hip_lf=float(data.get("HipLength") or data.get("Hips") or 0.0),
-        valley_lf=float(data.get("ValleyLength") or data.get("Valleys") or 0.0),
-        rake_lf=float(data.get("RakeLength") or data.get("Rakes") or 0.0),
-        eave_lf=float(data.get("EaveLength") or data.get("Eaves") or 0.0),
-        flashing_lf=float(data.get("FlashingLength") or data.get("Flashing") or 0.0),
-        step_flashing_lf=float(data.get("StepFlashingLength") or data.get("StepFlashing") or 0.0),
+        ridge_lf=_to_float(totals.get("LengthRidge") or data.get("LengthRidge")),
+        hip_lf=_to_float(totals.get("LengthHip") or data.get("LengthHip")),
+        valley_lf=_to_float(totals.get("LengthValley") or data.get("LengthValley")),
+        rake_lf=_to_float(totals.get("LengthRake") or data.get("LengthRake")),
+        eave_lf=_to_float(totals.get("LengthEave") or data.get("LengthEave")),
+        flashing_lf=_to_float(totals.get("LengthFlashing") or data.get("LengthFlashing")),
+        step_flashing_lf=_to_float(totals.get("LengthStepFlashing") or data.get("LengthStepFlashing")),
         raw=data,
     )
 
