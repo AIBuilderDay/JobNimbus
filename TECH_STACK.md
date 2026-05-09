@@ -50,7 +50,7 @@
 | Service | What it does |
 |---|---|
 | **Anthropic Claude API** | AI-powered analysis and content generation |
-| **Replicate** (Hunyuan 3D) | Generate 3D roof models from satellite images |
+| **Replicate** (Hunyuan 3D) | Generate 3D house models from satellite and street view images |
 | **Tripo3D API** | Image-to-3D model generation with part segmentation |
 
 ### Roofing Industry

@@ -16,7 +16,7 @@ import { useAutoSync } from "../hooks/useAutoSync";
 
 type ViewMode = "satellite" | "topdown" | "3d";
 type ToolId = "select" | "lasso" | "measure" | "split" | "note";
-interface PanelPos { x: number; y: number; }
+interface PanelPos { x: number; y: number; anchor?: "left" | "right"; }
 interface ToolDef { id: ToolId; label: string; icon: string; }
 
 
@@ -30,6 +30,7 @@ const TOOLS: ToolDef[] = [
 ];
 
 const STORAGE_KEY = "estimator-panel-positions";
+const RIGHT_ANCHORED = new Set(["faces", "materials"]);
 
 function loadPositions(): Record<string, PanelPos> {
   try {
@@ -73,7 +74,11 @@ function GlassPanel({ id, children, className = "", style, editLayout, positions
   const pos = positions[id];
   const mergedStyle: CSSProperties = {
     ...style,
-    ...(pos ? { left: pos.x, top: pos.y, right: "auto", bottom: "auto" } : {}),
+    ...(pos
+      ? pos.anchor === "right"
+        ? { right: pos.x, top: pos.y, left: "auto", bottom: "auto" }
+        : { left: pos.x, top: pos.y, right: "auto", bottom: "auto" }
+      : {}),
   };
   return (
     <div
@@ -129,22 +134,26 @@ export default function EstimatorPage() {
 
   const focusedSegment = focusedSegmentIndex != null ? segments[focusedSegmentIndex] ?? null : null;
 
-  const panelDragRef = useRef<{ active: boolean; panelId: string; offsetX: number; offsetY: number }>({ active: false, panelId: "", offsetX: 0, offsetY: 0 });
+  const panelDragRef = useRef<{ active: boolean; panelId: string; offsetX: number; offsetY: number; panelWidth: number }>({ active: false, panelId: "", offsetX: 0, offsetY: 0, panelWidth: 0 });
 
   const handlePanelDragStart = useCallback((panelId: string, e: ReactMouseEvent) => {
     if (!editLayout) return;
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
-    panelDragRef.current = { active: true, panelId, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
+    panelDragRef.current = { active: true, panelId, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top, panelWidth: rect.width };
   }, [editLayout]);
 
   useEffect(() => {
     if (!editLayout) return;
     const handleMove = (e: MouseEvent) => {
       if (!panelDragRef.current.active) return;
-      const { panelId, offsetX, offsetY } = panelDragRef.current;
+      const { panelId, offsetX, offsetY, panelWidth } = panelDragRef.current;
       setPanelPositions((prev) => {
-        const next = { ...prev, [panelId]: { x: e.clientX - offsetX, y: e.clientY - offsetY } };
+        const leftEdge = e.clientX - offsetX;
+        const pos: PanelPos = RIGHT_ANCHORED.has(panelId)
+          ? { x: window.innerWidth - leftEdge - panelWidth, y: e.clientY - offsetY, anchor: "right" }
+          : { x: leftEdge, y: e.clientY - offsetY, anchor: "left" };
+        const next = { ...prev, [panelId]: pos };
         savePositions(next);
         return next;
       });
@@ -164,7 +173,7 @@ export default function EstimatorPage() {
       {/* Canvas — Google 3D Tiles (satellite), top-down blueprint, or 3D model */}
       <div className="absolute inset-0 z-0">
         {mode === "3d" ? (
-          <ModelViewer address={address ?? ""} buildingInsights={buildingInsights} onClearSegments={clearSelectedSegments} />
+          <ModelViewer address={address ?? ""} buildingInsights={buildingInsights} />
         ) : mode === "topdown" ? (
           <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: "#0e1830" }}>
             {segments.length > 0 ? (
@@ -254,7 +263,7 @@ export default function EstimatorPage() {
             <div className="w-full h-px bg-hair mb-3" />
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-mono font-bold text-ink/70 tracking-wider uppercase">
-                {focusedSegment ? `SEGMENT ${focusedSegmentIndex! + 1}` : selectedSegments.length > 0 ? `${selectedSegments.length} SEGMENT${selectedSegments.length > 1 ? "S" : ""} SELECTED` : "NO SEGMENT SELECTED"}
+                {focusedSegment ? `SEGMENT ${focusedSegmentIndex}` : selectedSegments.length > 0 ? `${selectedSegments.length} SEGMENT${selectedSegments.length > 1 ? "S" : ""} SELECTED` : "NO SEGMENT SELECTED"}
               </span>
               {selectedSegments.length > 0 && (
                 <span className="text-[10px] font-mono text-ink/50">{selectedSegments.length} selected</span>
@@ -321,8 +330,11 @@ export default function EstimatorPage() {
                 }
               }
               if (selectedSegments.length === 0 || !selectedMaterial) return null;
-              const totalEstimate = selectedArea * selectedMaterial.pricePerSf;
+              const materialTotal = selectedArea * selectedMaterial.pricePerSf;
               const avgPitch = selectedSegments.filter((s) => s.pitch_degrees != null).reduce((sum, s, _, arr) => sum + s.pitch_degrees! / arr.length, 0);
+              const dripEdgeLf = Math.round(Math.sqrt(selectedArea) * 4.2);
+              const dripEdgeCost = dripEdgeLf * 3.2;
+              const totalEstimate = materialTotal + dripEdgeCost;
               return (
                 <>
                   <div className="w-full h-px bg-hair my-3" />
@@ -344,7 +356,19 @@ export default function EstimatorPage() {
                       <span className="text-[12px] text-ink/60 font-mono font-semibold">Rate</span>
                       <span className="text-[12px] font-mono font-bold text-ink">{selectedMaterial.price}/sf</span>
                     </div>
+                    <div className="flex items-center justify-between py-0.5">
+                      <span className="text-[12px] text-ink/60 font-mono font-semibold">Drip edge</span>
+                      <span className="text-[12px] font-mono font-bold text-ink">{dripEdgeLf} lf · $3.20/lf</span>
+                    </div>
                     <div className="w-full h-px bg-hair my-1" />
+                    <div className="flex items-center justify-between py-0.5">
+                      <span className="text-[12px] text-ink/60 font-mono font-semibold">Materials</span>
+                      <span className="text-[12px] font-mono font-bold text-ink">${materialTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex items-center justify-between py-0.5">
+                      <span className="text-[12px] text-ink/60 font-mono font-semibold">Drip edge</span>
+                      <span className="text-[12px] font-mono font-bold text-ink">${dripEdgeCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
                     <div className="flex items-center justify-between py-1">
                       <span className="text-[13px] font-mono font-bold text-ink">Total</span>
                       <span className="text-[17px] font-mono font-bold text-blue">${totalEstimate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
@@ -387,16 +411,17 @@ export default function EstimatorPage() {
           <div className="space-y-0.5 max-h-[400px] overflow-y-auto">
             {segments.map((seg, i) => {
               const isSel = selectedSegmentIndices.includes(i);
+              const isFocused = focusedSegmentIndex === i;
               return (
-                <div key={i} onClick={() => setFocusedSegmentIndex(focusedSegmentIndex === i ? null : i)}
-                  className={`w-full flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer transition-colors text-left font-sans ${isSel ? "bg-blue-100" : "bg-transparent hover:bg-hair/40"}`}>
+                <div key={i} onClick={() => setFocusedSegmentIndex(isFocused ? null : i)}
+                  className={`w-full flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer transition-colors text-left font-sans border-2 ${isSel ? "bg-blue-100 border-transparent" : isFocused ? "bg-transparent border-blue" : "bg-transparent border-transparent hover:bg-hair/40"}`}>
                   <button
                     onClick={(e) => { e.stopPropagation(); toggleSegmentIndex(i); }}
-                    className={`w-3.5 h-3.5 rounded-sm border-2 flex items-center justify-center shrink-0 cursor-pointer bg-transparent p-0 ${isSel ? "border-blue bg-blue" : "border-hair"}`}>
-                    {isSel && <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4L3 5.5L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                    className={`w-3.5 h-3.5 rounded-sm border-2 flex items-center justify-center shrink-0 cursor-pointer bg-transparent p-0 ${isSel ? "border-blue bg-white" : "border-hair"}`}>
+                    {isSel && <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4L3 5.5L6.5 2" stroke="#4C85E5" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                   </button>
                   <span className="flex-1 text-[12px] font-medium">
-                    Segment {i + 1}<span className="text-[10px] text-muted ml-1.5">{seg.azimuth_degrees != null ? `${azimuthToCompass(seg.azimuth_degrees)}-facing` : ""}</span>
+                    Segment {i}<span className="text-[10px] text-muted ml-1.5">{seg.azimuth_degrees != null ? `${azimuthToCompass(seg.azimuth_degrees)}-facing` : ""}</span>
                   </span>
                   <span className="text-[11px] font-mono text-muted">{Math.round(seg.area_sq_ft).toLocaleString()} sf</span>
                 </div>
@@ -466,13 +491,15 @@ export default function EstimatorPage() {
       </div>
 
       {/* Mode bar */}
-      <div className="absolute z-40 flex items-center gap-1 p-1 bg-[#1a2440]/85 rounded-full shadow-[0_0_0_1px_rgba(255,255,255,0.10)]" style={{ bottom: 24, left: "50%", transform: "translateX(-50%)" }}>
+      <div className="absolute z-40 left-0 right-0 flex justify-center pointer-events-none" style={{ bottom: 24 }}>
+        <div className="flex items-center gap-1 p-1 bg-[#1a2440]/85 rounded-full shadow-[0_0_0_1px_rgba(255,255,255,0.10)] pointer-events-auto">
         {(["satellite", "topdown", "3d"] as const).map((m) => (
           <button key={m} onClick={() => setMode(m)}
             className={`px-4 py-1.5 rounded-full text-[11px] font-semibold font-mono border-none cursor-pointer transition-colors ${mode === m ? "bg-white text-ink shadow-[0_2px_8px_rgba(0,0,0,0.12)]" : "bg-transparent text-white hover:bg-white/10"}`}>
             {m === "topdown" ? "Top-down" : m === "3d" ? "3D Model" : "Satellite"}
           </button>
         ))}
+        </div>
       </div>
 
       <CrewChat />

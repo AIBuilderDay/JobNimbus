@@ -1,4 +1,4 @@
-import { Suspense, useRef, useEffect, useState, useCallback } from "react";
+import { Suspense, useRef, useEffect, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, useGLTF, Center, Environment } from "@react-three/drei";
 import type { Group } from "three";
@@ -22,10 +22,9 @@ const CALIBRATE = import.meta.env.DEV && new URLSearchParams(window.location.sea
 
 interface ModelProps {
   url: string;
-  onClearSegments: () => void;
 }
 
-function Model({ url, onClearSegments }: ModelProps) {
+function Model({ url }: ModelProps) {
   const { scene } = useGLTF(url);
   const ref = useRef<Group>(null);
 
@@ -38,13 +37,9 @@ function Model({ url, onClearSegments }: ModelProps) {
     }
   }, [scene]);
 
-  const handleMissed = useCallback(() => {
-    onClearSegments();
-  }, [onClearSegments]);
-
   return (
     <Center>
-      <primitive ref={ref} object={scene} onClick={CALIBRATE ? undefined : handleMissed} />
+      <primitive ref={ref} object={scene} />
       {CALIBRATE && <SegmentCalibrator />}
     </Center>
   );
@@ -75,10 +70,9 @@ const LOADING_STAGES = [
 interface Props {
   address: string;
   buildingInsights?: BuildingInsightsResponse | null;
-  onClearSegments?: () => void;
 }
 
-export default function ModelViewer({ address, onClearSegments }: Props) {
+export default function ModelViewer({ address }: Props) {
   const [loading, setLoading] = useState(true);
   const [stage, setStage] = useState(LOADING_STAGES[0]);
 
@@ -106,7 +100,6 @@ export default function ModelViewer({ address, onClearSegments }: Props) {
   }, [address]);
 
   const modelUrl = resolveModel(address);
-  const noop = useCallback(() => {}, []);
 
   if (!modelUrl) {
     return (
@@ -130,10 +123,7 @@ export default function ModelViewer({ address, onClearSegments }: Props) {
           <directionalLight position={[10, 15, 10]} intensity={1.2} castShadow />
           <directionalLight position={[-5, 8, -5]} intensity={0.3} />
           <Suspense fallback={null}>
-            <Model
-              url={modelUrl}
-              onClearSegments={onClearSegments ?? noop}
-            />
+            <Model url={modelUrl} />
             <Environment preset="city" />
           </Suspense>
           <OrbitControls

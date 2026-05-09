@@ -298,6 +298,9 @@ export default function PricingPage() {
     ? selectedSegmentIndices.reduce((sum, i) => sum + (segments[i]?.area_sq_ft ?? 0), 0)
     : buildingInsights?.total_roof_area_sq_ft ?? 0;
 
+  const dripEdgeLf = roofAreaSqFt > 0 ? Math.round(Math.sqrt(roofAreaSqFt) * 4.2) : 0;
+  const DRIP_EDGE_PRICE_PER_LF = 3.2;
+
   const seededLineItems = useMemo(() => {
     const nonMaterialItems = fetchedLineItems.filter((i) => i.category !== "materials");
     if (selectedMaterial && roofAreaSqFt > 0) {
@@ -312,8 +315,20 @@ export default function PricingPage() {
         category: "materials",
       });
     }
+    if (dripEdgeLf > 0) {
+      const dripTotal = dripEdgeLf * DRIP_EDGE_PRICE_PER_LF;
+      nonMaterialItems.push({
+        color: "#8B8B8B",
+        name: "Drip Edge",
+        detail: `Eave + rake perimeter · est. ${dripEdgeLf} LF`,
+        qty: `${dripEdgeLf} lf`,
+        unitPrice: `$${DRIP_EDGE_PRICE_PER_LF.toFixed(2)}`,
+        total: `$${dripTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        category: "materials",
+      });
+    }
     return nonMaterialItems;
-  }, [fetchedLineItems, selectedMaterial, roofAreaSqFt]);
+  }, [fetchedLineItems, selectedMaterial, roofAreaSqFt, dripEdgeLf]);
 
   const allLineItems = managedItems ?? seededLineItems;
 

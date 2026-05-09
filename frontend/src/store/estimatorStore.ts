@@ -10,6 +10,7 @@ export interface PricingState {
 }
 
 export interface ProposalState {
+  customerName: string;
   coverNote: string;
   recipient: string;
   cc: string;
@@ -25,10 +26,15 @@ const DEFAULT_PRICING: PricingState = {
   financing: 0,
 };
 
+function defaultCoverNote(name: string, address: string): string {
+  return `Hi ${name},\n\nThank you for the opportunity to inspect your roof at ${address}. After our drone survey and on-site assessment, we recommend a full re-roof using GAF Duration Estate Gray shingles.\n\nThe enclosed proposal covers all materials, labor, disposal, and permits. We've included two financing options for your convenience.\n\nWe'd love to get you on the schedule before the rainy season. Feel free to reach out with any questions.\n\nBest regards,\nTeam Nimbus Quote`;
+}
+
 const DEFAULT_PROPOSAL: ProposalState = {
-  coverNote: `Hi Maria,\n\nThank you for the opportunity to inspect your roof at 412 W Holloway Ave. After our drone survey and on-site assessment, we recommend a full re-roof using GAF Duration Estate Gray shingles.\n\nThe enclosed proposal covers all materials, labor, disposal, and permits. We've included two financing options for your convenience.\n\nWe'd love to get you on the schedule before the rainy season. Feel free to reach out with any questions.\n\nBest regards,\nTeam Holloway Roofing`,
-  recipient: "maria.delgado@gmail.com",
-  cc: "office@hollowayroofing.com",
+  customerName: "McKay Snell",
+  coverNote: defaultCoverNote("McKay", "your property"),
+  recipient: "mckayqsnell@gmail.com",
+  cc: "",
   tone: 1,
   toggles: [true, true, true, false],
   previewTab: 0,
@@ -81,7 +87,15 @@ export const useEstimatorStore = create<EstimatorState>()(
       lastSyncedAt: null,
       isSyncing: false,
 
-      setLocation: (loc, address) => set({ location: loc, address }),
+      setLocation: (loc, address) =>
+        set((state) => ({
+          location: loc,
+          address,
+          proposalState: {
+            ...state.proposalState,
+            coverNote: defaultCoverNote(state.proposalState.customerName, address),
+          },
+        })),
       setSatelliteImageUrl: (url) => set({ satelliteImageUrl: url }),
       setBuildingInsights: (data) => set({ buildingInsights: data }),
       toggleSegmentIndex: (index) =>
@@ -140,8 +154,9 @@ export const useEstimatorStore = create<EstimatorState>()(
       name: "estimator-state",
       storage: createJSONStorage(() => sessionStorage),
       partialize: (state) => {
-        const { isSyncing, ...rest } = state;
+        const { isSyncing, lastProposalPdfBase64, ...rest } = state;
         void isSyncing;
+        void lastProposalPdfBase64;
         return rest;
       },
     },

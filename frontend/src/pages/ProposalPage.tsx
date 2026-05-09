@@ -85,6 +85,14 @@ function ToneChip({
 /*  ProposalPage                                                       */
 /* ================================================================== */
 
+function monthlyPayment(total: number, down: number, aprPct: number, months: number): string {
+  const principal = total - down;
+  if (aprPct === 0) return Math.round(principal / months).toLocaleString();
+  const r = aprPct / 100 / 12;
+  const pmt = principal * (r * Math.pow(1 + r, months)) / (Math.pow(1 + r, months) - 1);
+  return Math.round(pmt).toLocaleString();
+}
+
 function fmtUSD(cents: number): string {
   return (cents / 100).toLocaleString("en-US", {
     style: "currency",
@@ -94,29 +102,27 @@ function fmtUSD(cents: number): string {
 
 export default function ProposalPage() {
   const navigate = useNavigate();
-  const { address, estimateId, proposalState, setProposalState, setLastProposalPdfBase64 } = useEstimatorStore();
+  const { address, estimateId, proposalState, pricingState, setProposalState, setLastProposalPdfBase64 } = useEstimatorStore();
   const { isSyncing, lastSyncedAt, syncNow } = useAutoSync();
   const { data: pricing } = usePricing(estimateId);
   const totalDisplay = pricing ? fmtUSD(pricing.customer_total_cents) : "$25,582";
+  const customerTotal = pricing ? pricing.customer_total_cents / 100 : 25582;
+  const { financing } = pricingState;
+  const displayName = proposalState.customerName || "Homeowner";
+  const displayAddress = address ?? "No address selected";
+  const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
-  const { coverNote, recipient, cc, tone, toggles, previewTab } = proposalState;
+  const { coverNote, recipient, cc, tone, toggles } = proposalState;
   const setCoverNote = (v: string) => setProposalState({ coverNote: v });
   const setRecipient = (v: string) => setProposalState({ recipient: v });
   const setCc = (v: string) => setProposalState({ cc: v });
   const setTone = (v: number) => setProposalState({ tone: v });
-  const setPreviewTab = (v: number) => setProposalState({ previewTab: v });
 
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
   const toneLabels = ["Formal", "Conversational", "Direct", "Warm"];
-  const previewTabs = [
-    "Page 1 · Cover",
-    "Page 2 · Scope",
-    "Page 3 · Pricing",
-    "Mobile",
-  ];
   const toggleLabels = [
     "Show financing",
     "Embed e-signature",
@@ -266,7 +272,7 @@ export default function ProposalPage() {
                 Ready to send
               </div>
               <div className="text-[12px] text-muted leading-relaxed">
-                Maria will receive a branded email with an interactive proposal
+                {displayName} will receive a branded email with an interactive proposal
                 link. The proposal locks pricing for 30 days.
               </div>
               {sendError && (
@@ -293,32 +299,10 @@ export default function ProposalPage() {
               LIVE PREVIEW
             </div>
             <h1 className="font-serif text-[44px] leading-[1.06] font-normal tracking-[-1px] text-white mt-1.5">
-              What Maria will see.
+              What {displayName} will see.
             </h1>
           </div>
 
-          {/* Preview tabs */}
-          <div className="flex gap-1">
-            {previewTabs.map((t, i) => (
-              <button
-                key={t}
-                onClick={() => setPreviewTab(i)}
-                className="rounded-full px-3 py-1.5 text-[11px] font-semibold font-mono cursor-pointer border-none transition-colors"
-                style={{
-                  background:
-                    i === previewTab
-                      ? "rgba(255,255,255,0.15)"
-                      : "transparent",
-                  color:
-                    i === previewTab
-                      ? "#fff"
-                      : "rgba(255,255,255,0.5)",
-                }}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
 
           {/* PDF preview card */}
           <div
@@ -332,29 +316,29 @@ export default function ProposalPage() {
                 <BrandMark size={28} />
                 <div>
                   <div className="text-[12px] font-semibold text-ink">
-                    Holloway Roofing Co.
+                    Nimbus Quote
                   </div>
                   <div className="text-[10px] text-muted font-mono">
-                    Tampa, FL &middot; License #CCC1331234
+                    Lehi, UT &middot; License #CCC1331234
                   </div>
                 </div>
               </div>
               <div className="text-right">
                 <div className="text-[10px] font-mono text-muted">
-                  EST-2418 &middot; v3
+                  {estimateId ? `EST-${estimateId.slice(0, 6).toUpperCase()}` : "EST-DRAFT"}
                 </div>
                 <div className="text-[10px] font-mono text-muted">
-                  Generated Mar 14, 2025
+                  Generated {today}
                 </div>
               </div>
             </div>
 
             {/* Title */}
             <h2 className="font-serif text-[28px] leading-[1.1] font-normal text-ink tracking-[-0.5px] mb-1">
-              Re-roof proposal for the Delgado residence.
+              Re-roof proposal for {displayName}.
             </h2>
             <div className="text-[11px] text-muted font-mono mb-6">
-              412 W Holloway Ave &middot; Tampa, FL 33606
+              {displayAddress}
             </div>
 
             {/* Cover note */}
@@ -371,14 +355,12 @@ export default function ProposalPage() {
               {(pricing
                 ? [
                     { label: "Subtotal", value: fmtUSD(pricing.subtotal_cents) },
-                    { label: `Margin (${pricing.margin_pct}%)`, value: fmtUSD(pricing.margin_addon_cents) },
                     { label: `Sales tax (${pricing.sales_tax_pct}%)`, value: fmtUSD(pricing.sales_tax_cents) },
                   ]
                 : [
                     { label: "Materials", value: "$14,248.10" },
                     { label: "Labor", value: "$3,870.00" },
                     { label: "Disposal & permits", value: "$420.00" },
-                    { label: "Margin (38%)", value: "$7,044.00" },
                   ]
               ).map((r) => (
                 <div
@@ -403,6 +385,61 @@ export default function ProposalPage() {
               </span>
             </div>
 
+            {/* Financing */}
+            {toggles[0] && <div className="border border-hair rounded-lg p-3 mb-6">
+              <div className="text-[10px] font-mono text-muted uppercase tracking-wider mb-2">
+                FINANCING
+              </div>
+              {financing === 0 && (
+                <>
+                  <div className="flex justify-between text-[10.5px] text-ink">
+                    <span>$0 down · 84 months @ 9.99% APR</span>
+                    <span className="font-mono font-semibold">${monthlyPayment(customerTotal, 0, 9.99, 84)}/mo</span>
+                  </div>
+                  <div className="flex justify-between text-[9.5px] text-muted mt-1">
+                    <span>Total financed cost</span>
+                    <span className="font-mono">${(Number(monthlyPayment(customerTotal, 0, 9.99, 84).replace(/,/g, "")) * 84).toLocaleString()}</span>
+                  </div>
+                </>
+              )}
+              {financing === 1 && (
+                <>
+                  <div className="flex justify-between text-[10.5px] text-ink">
+                    <span>$2,500 down · 60 months @ 7.99% APR</span>
+                    <span className="font-mono font-semibold">${monthlyPayment(customerTotal, 2500, 7.99, 60)}/mo</span>
+                  </div>
+                  <div className="flex justify-between text-[9.5px] text-muted mt-1">
+                    <span>Total financed cost</span>
+                    <span className="font-mono">${(2500 + Number(monthlyPayment(customerTotal, 2500, 7.99, 60).replace(/,/g, "")) * 60).toLocaleString()}</span>
+                  </div>
+                </>
+              )}
+              {financing === 2 && (
+                <>
+                  <div className="flex justify-between text-[10.5px] text-ink">
+                    <span>Same as cash · 18 months @ 0% APR</span>
+                    <span className="font-mono font-semibold">${monthlyPayment(customerTotal, 0, 0, 18)}/mo</span>
+                  </div>
+                  <div className="flex justify-between text-[9.5px] text-muted mt-1">
+                    <span>Total cost (same as cash)</span>
+                    <span className="font-mono">${Math.round(customerTotal).toLocaleString()}</span>
+                  </div>
+                </>
+              )}
+              {financing === 3 && (
+                <>
+                  <div className="flex justify-between text-[10.5px] text-ink">
+                    <span>Pay in full · 3% discount</span>
+                    <span className="font-mono font-semibold">−${Math.round(customerTotal * 0.03).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-[9.5px] text-muted mt-1">
+                    <span>Amount due</span>
+                    <span className="font-mono">${Math.round(customerTotal * 0.97).toLocaleString()}</span>
+                  </div>
+                </>
+              )}
+            </div>}
+
             {/* Signature blocks */}
             <div className="grid grid-cols-2 gap-6 mb-6">
               <div>
@@ -421,7 +458,7 @@ export default function ProposalPage() {
 
             {/* Footer */}
             <div className="border-t border-hair pt-3 text-[9px] text-muted font-mono text-center">
-              Holloway Roofing Co. &middot; 1200 N Tampa St, Tampa FL 33602
+              Nimbus Quote &middot; Lehi, UT
               &middot; (813) 555-0142
             </div>
           </div>

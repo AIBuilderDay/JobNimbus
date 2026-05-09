@@ -59,7 +59,10 @@ export function createRoofSegmentLayer(
   const features = segments
     .map((seg, idx) => {
       const coords = segmentToCoords(seg);
-      if (!coords) return null;
+      if (!coords) {
+        console.warn(`[roofSegmentLayer] segment ${idx} skipped: polygon=${!!seg.polygon} bounding_box=${!!seg.bounding_box}`, seg);
+        return null;
+      }
       return {
         type: "Feature" as const,
         geometry: {
@@ -69,7 +72,8 @@ export function createRoofSegmentLayer(
         properties: { index: idx, area: seg.area_sq_ft },
       };
     })
-    .filter((f): f is NonNullable<typeof f> => f !== null);
+    .filter((f): f is NonNullable<typeof f> => f !== null)
+    .sort((a, b) => b.properties.area - a.properties.area);
 
   return new GeoJsonLayer<SegmentFeatureProps>({
     id: "roof-segments",

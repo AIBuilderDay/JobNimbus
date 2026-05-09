@@ -6,7 +6,7 @@ from settings import settings
 log = get_logger(__name__)
 
 RESEND_API_URL = "https://api.resend.com/emails"
-FROM_ADDRESS = "Holloway Roofing <onboarding@resend.dev>"
+FROM_ADDRESS = "onboarding@resend.dev"
 
 
 async def send_proposal_email(
