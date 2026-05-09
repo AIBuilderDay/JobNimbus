@@ -7,6 +7,7 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from dao.database import init_db
 from logger import get_logger
 from routers import aerial, estimate, places, model3d
 
@@ -16,6 +17,7 @@ log = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("backend starting")
+    init_db()
     yield
     log.info("backend shutting down")
 
