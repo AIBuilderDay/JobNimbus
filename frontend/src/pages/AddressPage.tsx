@@ -12,12 +12,6 @@ import { toast } from "sonner";
 import type { Property } from "../types/estimate";
 import { useAutoSync } from "../hooks/useAutoSync";
 
-const ADDRESS_STEPS = [
-  { n: 1, label: "Address", path: "/address" },
-  { n: 2, label: "Materials", path: "/estimator" },
-  { n: 3, label: "Proposal", path: "/proposal" },
-  { n: 4, label: "Finalize", path: "/finalization" },
-];
 
 /* ------------------------------------------------------------------ */
 /*  Icons                                                              */
@@ -227,7 +221,7 @@ export default function AddressPage() {
           </Link>
 
           <div className="flex-1 flex justify-center">
-            <StepCrumbs current={1} steps={ADDRESS_STEPS} />
+            <StepCrumbs current={1} />
           </div>
 
           <SavedIndicator isSyncing={isSyncing} lastSyncedAt={lastSyncedAt} />

@@ -32,7 +32,7 @@ function segmentColor(
 }
 
 interface SegmentFeatureProps {
-  id: number;
+  index: number;
   area: number;
 }
 
@@ -43,7 +43,7 @@ export function createRoofSegmentLayer(
   const selectedSet = new Set(selectedIndices);
 
   const features = segments
-    .map((seg) => {
+    .map((seg, idx) => {
       const coords = segmentToCoords(seg);
       if (!coords) return null;
       return {
@@ -52,7 +52,7 @@ export function createRoofSegmentLayer(
           type: "Polygon" as const,
           coordinates: [coords],
         },
-        properties: { id: seg.id, area: seg.area_sq_ft },
+        properties: { index: idx, area: seg.area_sq_ft },
       };
     })
     .filter((f): f is NonNullable<typeof f> => f !== null);
@@ -65,9 +65,9 @@ export function createRoofSegmentLayer(
     },
     extensions: [new TerrainExtension()],
     parameters: { depthCompare: "always" },
-    getFillColor: (f) => segmentColor(selectedSet.has(f.properties.id), f.properties.area),
+    getFillColor: (f) => segmentColor(selectedSet.has(f.properties.index), f.properties.area),
     getLineColor: (f) =>
-      selectedSet.has(f.properties.id)
+      selectedSet.has(f.properties.index)
         ? [56, 104, 198, 255]
         : [255, 255, 255, 120],
     getLineWidth: 2,

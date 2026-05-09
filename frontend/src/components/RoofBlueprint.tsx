@@ -12,6 +12,7 @@ interface SegmentBBox {
 
 export interface BlueprintSegment {
   id: number;
+  index: number;
   pitch_degrees: number | null;
   azimuth_degrees: number | null;
   area_sq_ft: number;
@@ -185,7 +186,7 @@ export default function RoofBlueprint({
         const cx = (sw.x + ne.x) / 2;
         const cy = (sw.y + ne.y) / 2;
         const pitch = seg.pitch_degrees != null ? `${seg.pitch_degrees.toFixed(0)}°` : "—";
-        const isSelected = selectedSet.has(seg.id);
+        const isSelected = selectedSet.has(seg.index);
 
         return (
           <g

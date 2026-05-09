@@ -10,7 +10,8 @@ import { fetchRoofPolygons } from "../api/roofPolygons";
 import type { RoofSegment } from "../types/solar";
 import RoofBlueprint, { type BlueprintSegment } from "../components/RoofBlueprint";
 import ModelViewer from "../components/ModelViewer";
-import { MATERIALS, type MaterialTab } from "../data/materials";
+import { useMaterials } from "../hooks/useEstimates";
+import type { MaterialTab } from "../api/estimates";
 import { useAutoSync } from "../hooks/useAutoSync";
 
 type ViewMode = "satellite" | "topdown" | "3d";
@@ -18,12 +19,6 @@ type ToolId = "select" | "lasso" | "measure" | "split" | "note";
 interface PanelPos { x: number; y: number; }
 interface ToolDef { id: ToolId; label: string; icon: string; }
 
-const ESTIMATOR_STEPS = [
-  { n: 1, label: "Address", path: "/address" },
-  { n: 2, label: "Materials", path: "/estimator" },
-  { n: 3, label: "Proposal", path: "/proposal" },
-  { n: 4, label: "Finalize", path: "/finalization" },
-];
 
 
 const TOOLS: ToolDef[] = [
@@ -99,6 +94,7 @@ export default function EstimatorPage() {
     setSelectedMaterialId, setSegmentPolygons,
   } = useEstimatorStore();
   const { isSyncing, lastSyncedAt, syncNow } = useAutoSync();
+  const { data: materialsMap } = useMaterials();
 
   const handleNext = () => {
     syncNow();
@@ -165,26 +161,27 @@ export default function EstimatorPage() {
       {/* Canvas — Google 3D Tiles (satellite), top-down blueprint, or 3D model */}
       <div className="absolute inset-0 z-0">
         {mode === "3d" ? (
-          <ModelViewer address={address ?? ""} buildingInsights={buildingInsights} selectedSegmentIndices={selectedSegmentIndices} onToggleSegment={toggleSegmentIndex} onClearSegments={clearSelectedSegments} />
+          <ModelViewer address={address ?? ""} buildingInsights={buildingInsights} onClearSegments={clearSelectedSegments} />
         ) : mode === "topdown" ? (
           <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: "#0e1830" }}>
             {segments.length > 0 ? (
               <RoofBlueprint
                 segments={segments
-                  .filter((seg) => seg.bounding_box != null)
-                  .map((seg): BlueprintSegment => ({
+                  .map((seg, i): BlueprintSegment | null => seg.bounding_box == null ? null : ({
                     id: seg.id,
+                    index: i,
                     pitch_degrees: seg.pitch_degrees,
                     azimuth_degrees: seg.azimuth_degrees,
                     area_sq_ft: seg.area_sq_ft,
-                    bounding_box: seg.bounding_box!,
+                    bounding_box: seg.bounding_box,
                     center: seg.center ?? undefined,
-                  }))}
+                  }))
+                  .filter((s): s is BlueprintSegment => s !== null)}
                 width={820}
                 height={600}
                 dark
                 selectedSegmentIds={selectedSegmentIndices}
-                onSegmentClick={(seg) => toggleSegmentIndex(seg.id)}
+                onSegmentClick={(seg) => toggleSegmentIndex(seg.index)}
                 style={{ display: "block", width: "min(680px, 70vw, 70vh * 1.367)" }}
               />
             ) : (
@@ -220,7 +217,7 @@ export default function EstimatorPage() {
         </div>
 
         <NavDivider />
-        <StepCrumbs current={2} steps={ESTIMATOR_STEPS} />
+        <StepCrumbs current={2} />
 
         <SavedIndicator isSyncing={isSyncing} lastSyncedAt={lastSyncedAt} />
         <div className="flex items-center gap-3 shrink-0">
@@ -345,7 +342,7 @@ export default function EstimatorPage() {
       </GlassPanel>
 
       {/* Material picker */}
-      <GlassPanel id="materials" editLayout={editLayout} positions={panelPositions} onDragStart={handlePanelDragStart} className="bg-white/88 text-ink p-4" style={{ top: 90, right: 320, width: 290, zIndex: 30 }}>
+      <GlassPanel id="materials" editLayout={editLayout} positions={panelPositions} onDragStart={handlePanelDragStart} className="bg-white/88 text-ink p-4" style={{ bottom: 70, right: 20, width: 290, zIndex: 30 }}>
         <div className="text-[9.5px] font-mono text-muted tracking-wider uppercase mb-2.5">Quick materials</div>
         <div className="flex gap-1 mb-3">
           {(["shingle", "metal", "membrane"] as const).map((tab) => (
@@ -356,7 +353,7 @@ export default function EstimatorPage() {
           ))}
         </div>
         <div className="grid grid-cols-2 gap-2 max-h-[220px] overflow-y-auto">
-          {MATERIALS[materialTab].map((mat) => {
+          {(materialsMap?.[materialTab] ?? []).map((mat) => {
             const selected = selectedMaterialId === mat.id;
             return (
               <button key={mat.id} onClick={() => setSelectedMaterialId(selected ? null : mat.id)}

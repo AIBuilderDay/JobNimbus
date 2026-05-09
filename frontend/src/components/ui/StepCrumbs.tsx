@@ -8,10 +8,9 @@ export interface StepDef {
 
 const DEFAULT_STEPS: StepDef[] = [
   { n: 1, label: "Address", path: "/address" },
-  { n: 2, label: "Capture", path: "/estimator" },
-  { n: 3, label: "Facets", path: "/estimator" },
-  { n: 4, label: "Pricing", path: "/pricing" },
-  { n: 5, label: "Proposal", path: "/proposal" },
+  { n: 2, label: "Materials", path: "/estimator" },
+  { n: 3, label: "Proposal", path: "/proposal" },
+  { n: 4, label: "Finalize", path: "/finalization" },
 ];
 
 interface StepCrumbsProps {

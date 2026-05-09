@@ -1,11 +1,9 @@
-import { Suspense, useRef, useEffect, useState, useCallback, useMemo } from "react";
+import { Suspense, useRef, useEffect, useState, useCallback } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, useGLTF, Center, Environment } from "@react-three/drei";
 import type { Group } from "three";
-import RoofSegmentOverlay from "./RoofSegmentOverlay";
 import SegmentCalibrator from "./SegmentCalibrator";
 import { getOverlaysForAddress } from "../data/roofSegmentOverlays";
-import { transformSolarToModel } from "../utils/solarToModelTransform";
 import type { BuildingInsightsResponse } from "../types/solar";
 
 const MODEL_MAP: [RegExp, string][] = [
@@ -24,15 +22,10 @@ const CALIBRATE = import.meta.env.DEV && new URLSearchParams(window.location.sea
 
 interface ModelProps {
   url: string;
-  buildingInsights?: BuildingInsightsResponse | null;
-  overlayConfig: ReturnType<typeof getOverlaysForAddress>;
-  selectedSegmentIndices: number[];
-  onToggleSegment: (index: number) => void;
   onClearSegments: () => void;
-  rotationDeg: number;
 }
 
-function Model({ url, buildingInsights, overlayConfig, selectedSegmentIndices, onToggleSegment, onClearSegments, rotationDeg }: ModelProps) {
+function Model({ url, onClearSegments }: ModelProps) {
   const { scene } = useGLTF(url);
   const ref = useRef<Group>(null);
 
@@ -45,18 +38,6 @@ function Model({ url, buildingInsights, overlayConfig, selectedSegmentIndices, o
     }
   }, [scene]);
 
-  const dynamicOverlays = useMemo(() => {
-    if (!buildingInsights?.segments?.length || !buildingInsights.center) return null;
-    return transformSolarToModel(
-      buildingInsights.segments,
-      buildingInsights.center,
-      scene,
-      rotationDeg,
-    );
-  }, [buildingInsights, scene, rotationDeg]);
-
-  const overlays = dynamicOverlays ?? overlayConfig?.segments ?? [];
-
   const handleMissed = useCallback(() => {
     onClearSegments();
   }, [onClearSegments]);
@@ -65,15 +46,6 @@ function Model({ url, buildingInsights, overlayConfig, selectedSegmentIndices, o
     <Center>
       <primitive ref={ref} object={scene} onClick={CALIBRATE ? undefined : handleMissed} />
       {CALIBRATE && <SegmentCalibrator />}
-      {!CALIBRATE && overlays.map((seg) => (
-        <RoofSegmentOverlay
-          key={seg.segmentIndex}
-          vertices={seg.vertices}
-          segmentIndex={seg.segmentIndex}
-          isSelected={selectedSegmentIndices.includes(seg.segmentIndex)}
-          onToggle={onToggleSegment}
-        />
-      ))}
     </Center>
   );
 }
@@ -103,12 +75,10 @@ const LOADING_STAGES = [
 interface Props {
   address: string;
   buildingInsights?: BuildingInsightsResponse | null;
-  selectedSegmentIndices?: number[];
-  onToggleSegment?: (index: number) => void;
   onClearSegments?: () => void;
 }
 
-export default function ModelViewer({ address, buildingInsights, selectedSegmentIndices = [], onToggleSegment, onClearSegments }: Props) {
+export default function ModelViewer({ address, buildingInsights, onClearSegments }: Props) {
   const [loading, setLoading] = useState(true);
   const [stage, setStage] = useState(LOADING_STAGES[0]);
 
@@ -164,12 +134,7 @@ export default function ModelViewer({ address, buildingInsights, selectedSegment
           <Suspense fallback={null}>
             <Model
               url={modelUrl}
-              buildingInsights={buildingInsights}
-              overlayConfig={overlayConfig}
-              selectedSegmentIndices={selectedSegmentIndices}
-              onToggleSegment={onToggleSegment ?? noop}
               onClearSegments={onClearSegments ?? noop}
-              rotationDeg={rotationDeg}
             />
             <Environment preset="city" />
           </Suspense>

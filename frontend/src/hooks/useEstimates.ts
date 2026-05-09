@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchEstimates, fetchProperties, fetchLineItems } from "../api/estimates";
+import { fetchEstimates, fetchProperties, fetchLineItems, fetchCatalog, fetchMaterials } from "../api/estimates";
 import type { EstimateStatus } from "../types/estimate";
 
 export function useEstimates(filter: "all" | EstimateStatus = "all") {
@@ -18,10 +18,26 @@ export function useProperties(query: string) {
   });
 }
 
-export function useLineItems() {
+export function useLineItems(estimateId: string = "EST-2418") {
   return useQuery({
-    queryKey: ["lineItems"],
-    queryFn: fetchLineItems,
+    queryKey: ["lineItems", estimateId],
+    queryFn: () => fetchLineItems(estimateId),
     staleTime: 60_000,
+  });
+}
+
+export function useCatalog(category?: string) {
+  return useQuery({
+    queryKey: ["catalog", category],
+    queryFn: () => fetchCatalog(category),
+    staleTime: 300_000,
+  });
+}
+
+export function useMaterials() {
+  return useQuery({
+    queryKey: ["materials"],
+    queryFn: fetchMaterials,
+    staleTime: 300_000,
   });
 }

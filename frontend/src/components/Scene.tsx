@@ -104,8 +104,9 @@ export default memo(function Scene({
     (info: PickingInfo) => {
       console.log("[Scene click]", { layerId: info.layer?.id, object: info.object, selectedIndices });
       if (info.layer?.id === "roof-segments" && info.object) {
-        const feature = info.object as { properties?: { id?: number } };
-        const idx = feature.properties?.id ?? -1;
+        const feature = info.object as { properties?: { index?: number } };
+        const idx = feature.properties?.index ?? -1;
+        if (idx < 0) return;
         console.log("[Scene] toggling segment", idx);
         onToggleSegment(idx);
       }

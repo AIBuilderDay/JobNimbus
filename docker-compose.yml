@@ -6,11 +6,6 @@
 # the `${VAR}` references below resolve from 1Password at compose-up time
 # instead of being written to disk as plain values.
 #
-# TODO: add a `db` service for SQLite (named volume mount) when we want shared
-# local persistence across `task up` cycles, or swap to Postgres if/when we
-# outgrow SQLite. For now the SQLite file lives inside the backend container
-# at /app/jobnimbus.db and is ephemeral — same as the Render deploy.
-
 services:
   backend:
     build:
@@ -26,8 +21,10 @@ services:
       EAGLEVIEW_BASE_URL: ${EAGLEVIEW_BASE_URL:-https://api.eagleview.com}
       REPLICATE_API_TOKEN: ${REPLICATE_API_TOKEN:-}
       TRIPO3D_API_KEY: ${TRIPO3D_API_KEY:-}
-      DATABASE_URL: ${DATABASE_URL:-sqlite:///./jobnimbus.db}
+      DATABASE_URL: ${DATABASE_URL:-sqlite:///./data/jobnimbus.db}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - backend_data:/app/data
 
   frontend:
     build:
@@ -50,4 +47,5 @@ services:
       - backend
 
 volumes:
+  backend_data:
   frontend_node_modules:

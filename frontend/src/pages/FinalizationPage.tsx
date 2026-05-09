@@ -158,7 +158,7 @@ export default function FinalizationPage() {
         <NavDivider />
         <NavMeta label="PROPERTY" value={address ?? "No address selected"} />
         <NavDivider />
-        <StepCrumbs current={6} completed />
+        <StepCrumbs current={4} completed />
         <NavDivider />
         <SavedIndicator isSyncing={isSyncing} lastSyncedAt={lastSyncedAt} />
         <NavDivider />

@@ -126,7 +126,7 @@ export default function ProposalPage() {
         <NavDivider />
         <NavMeta label="PROPERTY" value={address ?? "No address selected"} />
         <NavDivider />
-        <StepCrumbs current={5} />
+        <StepCrumbs current={3} />
         <NavDivider />
         <SavedIndicator isSyncing={isSyncing} lastSyncedAt={lastSyncedAt} />
         <NavDivider />

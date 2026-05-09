@@ -1,7 +1,4 @@
-import { estimates, statusCounts, lineItems } from "../data/estimates";
-import type { Estimate, EstimateStatus, Property, LineItem } from "../types/estimate";
-
-const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+import type { Estimate, EstimateStatus, Property, LineItem, CatalogItem } from "../types/estimate";
 
 export interface BackendEstimate {
   estimate_id: string;
@@ -66,13 +63,23 @@ export async function fetchAerialVideo(address: string): Promise<AerialVideoResp
 
 export async function fetchEstimates(
   filter: "all" | EstimateStatus = "all",
-): Promise<{ estimates: Estimate[]; counts: typeof statusCounts; total: number }> {
-  await delay(200);
-  const filtered =
-    filter === "all"
-      ? estimates
-      : estimates.filter((e) => e.status === filter);
-  return { estimates: filtered, counts: statusCounts, total: 28 };
+): Promise<{ estimates: Estimate[]; counts: Record<string, number>; total: number }> {
+  const params = new URLSearchParams({ status: filter });
+  const res = await fetch(`/api/listings?${params}`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch estimates: ${res.status}`);
+  }
+  const data = await res.json();
+  return {
+    ...data,
+    estimates: data.estimates.map((e: Record<string, unknown>) => ({
+      ...e,
+      cityState: e.city_state,
+      sqFt: e.sq_ft,
+      updatedSub: e.updated_sub,
+      staleDays: e.stale_days,
+    })),
+  };
 }
 
 export async function fetchProperties(
@@ -103,7 +110,47 @@ export async function fetchProperties(
   }));
 }
 
-export async function fetchLineItems(): Promise<LineItem[]> {
-  await delay(100);
-  return lineItems;
+export async function fetchLineItems(estimateId: string = "EST-2418"): Promise<LineItem[]> {
+  const res = await fetch(`/api/listings/${estimateId}/line-items`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch line items: ${res.status}`);
+  }
+  const data = await res.json();
+  return data.map((item: Record<string, string>) => ({
+    ...item,
+    unitPrice: item.unit_price,
+  }));
+}
+
+export async function fetchCatalog(category?: string): Promise<CatalogItem[]> {
+  const params = category ? new URLSearchParams({ category }) : "";
+  const res = await fetch(`/api/catalog${params ? `?${params}` : ""}`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch catalog: ${res.status}`);
+  }
+  const data = await res.json();
+  return data.map((item: Record<string, unknown>) => ({
+    ...item,
+    defaultUnit: item.default_unit,
+    defaultUnitPrice: item.default_unit_price,
+  }));
+}
+
+export interface MaterialCard {
+  id: string;
+  name: string;
+  sub: string;
+  price: string;
+  pricePerSf: number;
+  swatch: string;
+}
+
+export type MaterialTab = "shingle" | "metal" | "membrane";
+
+export async function fetchMaterials(): Promise<Record<MaterialTab, MaterialCard[]>> {
+  const res = await fetch("/api/catalog/materials");
+  if (!res.ok) {
+    throw new Error(`Failed to fetch materials: ${res.status}`);
+  }
+  return res.json();
 }
