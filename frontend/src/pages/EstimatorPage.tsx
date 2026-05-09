@@ -9,6 +9,7 @@ import { pollModelStatus, getModelUrl } from "../api/model3d";
 import { toast } from "sonner";
 import type { RoofSegment } from "../types/solar";
 import { fetchAerialVideo } from "../api/estimates";
+import RoofBlueprint, { type BlueprintSegment } from "../components/RoofBlueprint";
 
 type ViewMode = "perspective" | "satellite" | "topdown";
 type ToolId = "select" | "lasso" | "measure" | "split" | "note";
@@ -117,7 +118,7 @@ function GlassPanel({ id, children, className = "", style, editLayout, positions
 export default function EstimatorPage() {
   const navigate = useNavigate();
   const {
-    location, address, satelliteImageUrl, buildingInsights, selectedSegmentIndex, setSelectedSegmentIndex,
+    location, address, buildingInsights, selectedSegmentIndex, setSelectedSegmentIndex,
     estimateId, modelStatus, modelUrl, modelError,
     setModelStatus, setModelUrl, setModelError,
   } = useEstimatorStore();
@@ -263,6 +264,33 @@ export default function EstimatorPage() {
               )}
             </div>
           )
+        ) : mode === "topdown" ? (
+          <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: "#0e1830" }}>
+            {segments.length > 0 ? (
+              <RoofBlueprint
+                segments={segments
+                  .filter((seg) => seg.bounding_box != null)
+                  .map((seg): BlueprintSegment => ({
+                    id: seg.id,
+                    pitch_degrees: seg.pitch_degrees,
+                    azimuth_degrees: seg.azimuth_degrees,
+                    area_sq_ft: seg.area_sq_ft,
+                    bounding_box: seg.bounding_box!,
+                    center: seg.center ?? undefined,
+                  }))}
+                width={820}
+                height={600}
+                dark
+                selectedSegmentIds={selectedSegmentIndex >= 0 ? [selectedSegmentIndex] : []}
+                onSegmentClick={(seg) =>
+                  setSelectedSegmentIndex(seg.id === selectedSegmentIndex ? -1 : seg.id)
+                }
+                style={{ display: "block", width: "min(680px, 70vw, 70vh * 1.367)" }}
+              />
+            ) : (
+              <div className="text-white/55 text-[13px]">No roof segments to display</div>
+            )}
+          </div>
         ) : (
           <Scene location={location} buildingInsights={buildingInsights} selectedIndex={selectedSegmentIndex} onSelectSegment={handleSelectSegment} onCreditsUpdate={setCredits} />
         )}
@@ -353,13 +381,6 @@ export default function EstimatorPage() {
         <div className="text-[13px] font-semibold mb-2 break-words leading-tight">
           {address ?? "No address selected"}
         </div>
-        {satelliteImageUrl && (
-          <img
-            src={satelliteImageUrl}
-            alt="Satellite view of property"
-            className="w-full rounded-lg border border-hair mb-3"
-          />
-        )}
         {address && (
           <button
             onClick={handleAerialClick}

@@ -42,7 +42,7 @@ async def _fetch(lat: float, lng: float, quality: str) -> dict | None:
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, headers={"Referer": FRONTEND_REFERER})
+            resp = await client.get(url)
     except httpx.HTTPError:
         log.exception("solar request failed for lat=%s lng=%s quality=%s", lat, lng, quality)
         raise

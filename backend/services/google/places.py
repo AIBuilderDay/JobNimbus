@@ -6,7 +6,6 @@ from settings import settings
 log = get_logger(__name__)
 
 PLACES_AUTOCOMPLETE_URL = "https://places.googleapis.com/v1/places:autocomplete"
-FRONTEND_REFERER = "http://localhost:5173"
 FIELD_MASK = (
     "suggestions.placePrediction.placeId,"
     "suggestions.placePrediction.text,"
@@ -28,7 +27,6 @@ async def autocomplete(query: str) -> list[dict]:
                     "Content-Type": "application/json",
                     "X-Goog-Api-Key": settings.GOOGLE_MAPS_API_KEY,
                     "X-Goog-FieldMask": FIELD_MASK,
-                    "Referer": FRONTEND_REFERER,
                 },
                 json={
                     "input": query,

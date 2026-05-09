@@ -73,13 +73,13 @@ tasks:
       - docker build -t jobnimbus-backend .
 
   backend:up:
-    desc: Build and start backend container with env vars from .env
+    desc: Build and start backend container with secrets resolved from 1Password
     dir: backend
     cmds:
       - docker stop jobnimbus-backend 2>/dev/null || true
       - docker rm jobnimbus-backend 2>/dev/null || true
       - docker build --no-cache -t jobnimbus-backend .
-      - docker run -d -p 8000:8000 --env-file .env --name jobnimbus-backend jobnimbus-backend
+      - op run --env-file=.env -- docker run -d -p 8000:8000 -e GOOGLE_MAPS_API_KEY -e ANTHROPIC_API_KEY -e REPLICATE_API_TOKEN --name jobnimbus-backend jobnimbus-backend
 
   backend:down:
     desc: Stop backend container

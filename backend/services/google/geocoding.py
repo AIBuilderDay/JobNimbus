@@ -21,7 +21,7 @@ async def geocode(address: str) -> dict | None:
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, headers={"Referer": FRONTEND_REFERER})
+            resp = await client.get(url)
         resp.raise_for_status()
     except httpx.HTTPError:
         log.exception("geocode request failed for address=%s", address)
