@@ -5,7 +5,7 @@ from logger import get_logger
 from services.google.places import autocomplete
 
 log = get_logger(__name__)
-router = APIRouter()
+router = APIRouter(tags=["places"])
 
 
 class PlaceSuggestion(BaseModel):

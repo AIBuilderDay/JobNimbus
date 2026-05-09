@@ -5,7 +5,7 @@ from logger import get_logger
 from models import EstimateLineItem, EstimateListing, StatusCounts
 
 log = get_logger(__name__)
-router = APIRouter(prefix="/api/listings")
+router = APIRouter(prefix="/api/listings", tags=["listings"])
 
 
 @router.get("")
