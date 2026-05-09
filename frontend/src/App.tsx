@@ -1,21 +1,36 @@
-import { useEffect, useState } from "react";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { lazy, Suspense } from "react";
+
+const LandingPage = lazy(() => import("./pages/LandingPage"));
+const AddressPage = lazy(() => import("./pages/AddressPage"));
+const EstimatorPage = lazy(() => import("./pages/EstimatorPage"));
+const PricingPage = lazy(() => import("./pages/PricingPage"));
+const ProposalPage = lazy(() => import("./pages/ProposalPage"));
+const FinalizationPage = lazy(() => import("./pages/FinalizationPage"));
+const EstimatesPage = lazy(() => import("./pages/EstimatesPage"));
+
+function Loading() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#0e1830]">
+      <div className="text-white/60 font-mono text-sm">Loading…</div>
+    </div>
+  );
+}
 
 export default function App() {
-  const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    fetch("/api/health")
-      .then((r) => r.json())
-      .then((data) => setMessage(data.message))
-      .catch(() => setMessage("Backend not running"));
-  }, []);
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-center space-y-4">
-        <h1 className="text-4xl font-bold text-gray-900">JobNimbus</h1>
-        <p className="text-lg text-gray-600">{message || "Loading..."}</p>
-      </div>
-    </div>
+    <BrowserRouter>
+      <Suspense fallback={<Loading />}>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/address" element={<AddressPage />} />
+          <Route path="/estimator" element={<EstimatorPage />} />
+          <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/proposal" element={<ProposalPage />} />
+          <Route path="/finalization" element={<FinalizationPage />} />
+          <Route path="/estimates" element={<EstimatesPage />} />
+        </Routes>
+      </Suspense>
+    </BrowserRouter>
   );
 }
