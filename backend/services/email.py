@@ -6,7 +6,7 @@ from settings import settings
 log = get_logger(__name__)
 
 RESEND_API_URL = "https://api.resend.com/emails"
-FROM_ADDRESS = "Holloway Roofing <proposals@hollowayroofing.com>"
+FROM_ADDRESS = "Holloway Roofing <onboarding@resend.dev>"
 
 
 async def send_proposal_email(
@@ -14,6 +14,8 @@ async def send_proposal_email(
     cc: str | None,
     subject: str,
     html_body: str,
+    pdf_base64: str | None = None,
+    pdf_filename: str = "proposal.pdf",
 ) -> str:
     log.info("sending proposal email to=%s cc=%s", recipient, cc)
 
@@ -25,6 +27,10 @@ async def send_proposal_email(
     }
     if cc:
         payload["cc"] = [cc]
+    if pdf_base64:
+        payload["attachments"] = [
+            {"content": pdf_base64, "filename": pdf_filename}
+        ]
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
