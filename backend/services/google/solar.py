@@ -9,11 +9,23 @@ FRONTEND_REFERER = "http://localhost:5173"
 
 
 async def get_solar_data(lat: float, lng: float) -> dict | None:
-    """Returns parsed roof data from Solar API, or None if no coverage at this location."""
+    """Returns parsed roof data from Solar API, or None if no coverage at this location.
+
+    Tries HIGH quality first, falls back to MEDIUM. Some addresses have MEDIUM imagery
+    only — without the fallback we'd silently miss them.
+    """
+    for quality in ("HIGH", "MEDIUM"):
+        raw = await _fetch(lat, lng, quality)
+        if raw is not None:
+            return _parse(raw)
+    return None
+
+
+async def _fetch(lat: float, lng: float, quality: str) -> dict | None:
     params = urlencode({
         "location.latitude": lat,
         "location.longitude": lng,
-        "requiredQuality": "HIGH",
+        "requiredQuality": quality,
         "key": get_google_maps_api_key(),
     })
     url = f"{SOLAR_API_BASE}/buildingInsights:findClosest?{params}"
@@ -25,18 +37,22 @@ async def get_solar_data(lat: float, lng: float) -> dict | None:
         return None
 
     resp.raise_for_status()
-    return _parse(resp.json())
+    return resp.json()
 
 
 def _parse(data: dict) -> dict:
     solar = data.get("solarPotential", {})
     segments = []
-    for seg in solar.get("roofSegmentStats", []):
-        area_sq_ft = seg.get("stats", {}).get("areaMeters2", 0) * SQM_TO_SQFT
+    for i, seg in enumerate(solar.get("roofSegmentStats", [])):
+        stats = seg.get("stats", {})
+        area_sq_ft = stats.get("areaMeters2", 0) * SQM_TO_SQFT
+        ground_area_sq_ft = stats.get("groundAreaMeters2", 0) * SQM_TO_SQFT
         segments.append({
+            "id": i,
             "pitch_degrees": seg.get("pitchDegrees"),
             "azimuth_degrees": seg.get("azimuthDegrees"),
             "area_sq_ft": area_sq_ft,
+            "ground_area_sq_ft": ground_area_sq_ft,
             "plane_height_meters": seg.get("planeHeightAtCenterMeters"),
             "bounding_box": seg.get("boundingBox"),
             "center": seg.get("center"),
