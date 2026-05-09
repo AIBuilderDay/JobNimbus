@@ -12,6 +12,42 @@ tasks:
     cmds:
       - task --list
 
+  up:
+    desc: Build + start backend AND frontend together (docker compose, op-resolved secrets)
+    deps: [env:_check_op]
+    preconditions:
+      - sh: test -f frontend/.env.local
+        msg: |
+          ❌ frontend/.env.local missing
+          Run: task env:generate
+      - sh: test -f backend/.env
+        msg: |
+          ❌ backend/.env missing
+          Run: task env:generate
+    cmds:
+      - op run --env-file=backend/.env -- docker compose up --build
+
+  up:detached:
+    desc: Same as `task up` but runs detached
+    deps: [env:_check_op]
+    preconditions:
+      - sh: test -f frontend/.env.local
+        msg: "frontend/.env.local missing — run: task env:generate"
+      - sh: test -f backend/.env
+        msg: "backend/.env missing — run: task env:generate"
+    cmds:
+      - op run --env-file=backend/.env -- docker compose up --build -d
+
+  down:
+    desc: Stop backend + frontend (docker compose)
+    cmds:
+      - docker compose down
+
+  logs:
+    desc: Tail logs from backend + frontend (docker compose)
+    cmds:
+      - docker compose logs -f
+
   backend:dev:
     desc: Build, start, and tail logs for backend container
     deps: [backend:up]
