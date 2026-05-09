@@ -35,6 +35,8 @@ export interface RoofFace {
   hidden?: boolean;
 }
 
+export type LineItemCategory = "materials" | "labor" | "addons" | "disposal";
+
 export interface LineItem {
   color: string;
   name: string;
@@ -42,4 +44,15 @@ export interface LineItem {
   qty: string;
   unitPrice: string;
   total: string;
+  category: LineItemCategory;
+}
+
+export interface CatalogItem {
+  id: string;
+  name: string;
+  detail: string;
+  color: string;
+  defaultUnit: string;
+  defaultUnitPrice: number;
+  category: LineItemCategory;
 }

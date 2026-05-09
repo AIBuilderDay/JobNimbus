@@ -2,6 +2,38 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { BuildingInsightsResponse } from "../types/solar";
 
+export interface PricingState {
+  activeTab: number;
+  marginPct: number;
+  toggles: boolean[];
+  financing: number;
+}
+
+export interface ProposalState {
+  coverNote: string;
+  recipient: string;
+  cc: string;
+  tone: number;
+  toggles: boolean[];
+  previewTab: number;
+}
+
+const DEFAULT_PRICING: PricingState = {
+  activeTab: 0,
+  marginPct: 38,
+  toggles: [true, true, false],
+  financing: 0,
+};
+
+const DEFAULT_PROPOSAL: ProposalState = {
+  coverNote: `Hi Maria,\n\nThank you for the opportunity to inspect your roof at 412 W Holloway Ave. After our drone survey and on-site assessment, we recommend a full re-roof using GAF Duration Estate Gray shingles.\n\nThe enclosed proposal covers all materials, labor, disposal, and permits. We've included two financing options for your convenience.\n\nWe'd love to get you on the schedule before the rainy season. Feel free to reach out with any questions.\n\nBest regards,\nTeam Holloway Roofing`,
+  recipient: "maria.delgado@gmail.com",
+  cc: "office@hollowayroofing.com",
+  tone: 1,
+  toggles: [true, true, true, false],
+  previewTab: 0,
+};
+
 interface EstimatorState {
   location: { lat: number; lng: number } | null;
   address: string | null;
@@ -10,6 +42,11 @@ interface EstimatorState {
   selectedSegmentIndices: number[];
   estimateId: string | null;
   selectedMaterialId: string | null;
+
+  pricingState: PricingState;
+  proposalState: ProposalState;
+  lastSyncedAt: number | null;
+  isSyncing: boolean;
 
   setLocation: (loc: { lat: number; lng: number }, address: string) => void;
   setSatelliteImageUrl: (url: string | null) => void;
@@ -20,6 +57,9 @@ interface EstimatorState {
   setEstimateId: (id: string | null) => void;
   setSelectedMaterialId: (id: string | null) => void;
   setSegmentPolygons: (polygons: { segment_id: number; polygon: number[][] }[]) => void;
+  setPricingState: (patch: Partial<PricingState>) => void;
+  setProposalState: (patch: Partial<ProposalState>) => void;
+  setSyncStatus: (syncing: boolean, syncedAt?: number) => void;
   reset: () => void;
 }
 
@@ -33,6 +73,10 @@ export const useEstimatorStore = create<EstimatorState>()(
       selectedSegmentIndices: [],
       estimateId: null,
       selectedMaterialId: null,
+      pricingState: DEFAULT_PRICING,
+      proposalState: DEFAULT_PROPOSAL,
+      lastSyncedAt: null,
+      isSyncing: false,
 
       setLocation: (loc, address) => set({ location: loc, address }),
       setSatelliteImageUrl: (url) => set({ satelliteImageUrl: url }),
@@ -66,6 +110,12 @@ export const useEstimatorStore = create<EstimatorState>()(
             buildingInsights: { ...state.buildingInsights, segments },
           };
         }),
+      setPricingState: (patch) =>
+        set((state) => ({ pricingState: { ...state.pricingState, ...patch } })),
+      setProposalState: (patch) =>
+        set((state) => ({ proposalState: { ...state.proposalState, ...patch } })),
+      setSyncStatus: (syncing, syncedAt) =>
+        set({ isSyncing: syncing, ...(syncedAt != null ? { lastSyncedAt: syncedAt } : {}) }),
       reset: () =>
         set({
           location: null,
@@ -75,11 +125,20 @@ export const useEstimatorStore = create<EstimatorState>()(
           selectedSegmentIndices: [],
           estimateId: null,
           selectedMaterialId: null,
+          pricingState: DEFAULT_PRICING,
+          proposalState: DEFAULT_PROPOSAL,
+          lastSyncedAt: null,
+          isSyncing: false,
         }),
     }),
     {
       name: "estimator-state",
       storage: createJSONStorage(() => sessionStorage),
+      partialize: (state) => {
+        const { isSyncing, ...rest } = state;
+        void isSyncing;
+        return rest;
+      },
     },
   ),
 );

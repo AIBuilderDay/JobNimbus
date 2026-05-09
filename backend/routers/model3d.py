@@ -9,6 +9,7 @@ from logger import get_logger
 from services.google.street_view import get_building_images
 from services.image_cleanup import clean_images
 from services.replicate import generate_3d_model
+from services.tripo import generate_segmented_mesh
 from settings import settings
 
 log = get_logger(__name__)
@@ -164,3 +165,84 @@ def get_model_file(estimate_id: str) -> Response:
         media_type="model/gltf-binary",
         headers={"Content-Disposition": f'attachment; filename="{estimate_id}.glb"'},
     )
+
+
+# --- Tripo3D segmented mesh endpoints ---
+
+
+class TripoGenerateRequest(BaseModel):
+    estimate_id: str
+    images: list[str]  # base64-encoded images
+
+
+async def _run_tripo_pipeline(estimate_id: str, images: list[bytes]):
+    try:
+        _models[estimate_id]["status"] = "generating"
+        glb_bytes = await generate_segmented_mesh(images)
+        _models[estimate_id]["status"] = "completed"
+        _models[estimate_id]["glb"] = glb_bytes
+    except Exception as e:
+        log.exception("tripo pipeline failed estimate_id=%s", estimate_id)
+        _models[estimate_id]["status"] = "failed"
+        _models[estimate_id]["error"] = str(e)
+
+
+@router.post("/tripo/generate")
+async def tripo_generate(req: TripoGenerateRequest, background_tasks: BackgroundTasks) -> ModelStatus:
+    log.info("POST /api/model3d/tripo/generate estimate_id=%s images=%d", req.estimate_id, len(req.images))
+    if not settings.TRIPO3D_API_KEY:
+        raise HTTPException(status_code=503, detail="Tripo3D API key is not configured.")
+    if not req.images:
+        raise HTTPException(status_code=400, detail="At least one image required.")
+
+    image_bytes = []
+    for i, b64 in enumerate(req.images):
+        try:
+            image_bytes.append(base64.b64decode(b64))
+        except Exception:
+            raise HTTPException(status_code=400, detail=f"Invalid base64 in image at index {i}")
+
+    _models[req.estimate_id] = {"status": "pending", "glb": None, "error": None}
+    background_tasks.add_task(_run_tripo_pipeline, req.estimate_id, image_bytes)
+    return ModelStatus(estimate_id=req.estimate_id, status="pending")
+
+
+class TripoGenerateFromCoordsRequest(BaseModel):
+    estimate_id: str
+    lat: float
+    lng: float
+
+
+async def _run_tripo_full_pipeline(estimate_id: str, lat: float, lng: float):
+    try:
+        _models[estimate_id]["status"] = "capturing"
+        images = await get_building_images(lat, lng, num_views=4)
+
+        _models[estimate_id]["status"] = "cleaning"
+        images = await clean_images(images)
+
+        _models[estimate_id]["status"] = "generating"
+        glb_bytes = await generate_segmented_mesh(images)
+
+        _models[estimate_id]["status"] = "completed"
+        _models[estimate_id]["glb"] = glb_bytes
+    except Exception as e:
+        log.exception("tripo full pipeline failed estimate_id=%s", estimate_id)
+        _models[estimate_id]["status"] = "failed"
+        _models[estimate_id]["error"] = str(e)
+
+
+@router.post("/tripo/generate-from-coords")
+async def tripo_generate_from_coords(
+    req: TripoGenerateFromCoordsRequest,
+    background_tasks: BackgroundTasks,
+) -> ModelStatus:
+    log.info("POST /api/model3d/tripo/generate-from-coords estimate_id=%s lat=%s lng=%s", req.estimate_id, req.lat, req.lng)
+    if not settings.TRIPO3D_API_KEY:
+        raise HTTPException(status_code=503, detail="Tripo3D API key is not configured.")
+    if not settings.GOOGLE_MAPS_API_KEY:
+        raise HTTPException(status_code=503, detail="Google Maps API key is not configured.")
+
+    _models[req.estimate_id] = {"status": "pending", "glb": None, "error": None}
+    background_tasks.add_task(_run_tripo_full_pipeline, req.estimate_id, req.lat, req.lng)
+    return ModelStatus(estimate_id=req.estimate_id, status="pending")

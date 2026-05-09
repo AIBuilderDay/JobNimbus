@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import DarkLayout from "../components/layout/DarkLayout";
 import BrandMark from "../components/ui/BrandMark";
@@ -6,60 +5,12 @@ import GlassNav, {
   NavDivider,
   NavMeta,
   SavedIndicator,
-  NavGhostButton,
-  NavPrimaryButton,
+  NavIconButton,
 } from "../components/ui/GlassNav";
+import StepCrumbs from "../components/ui/StepCrumbs";
+import { useEstimatorStore } from "../store/estimatorStore";
+import { useAutoSync } from "../hooks/useAutoSync";
 
-/* ------------------------------------------------------------------ */
-/*  Step crumbs                                                        */
-/* ------------------------------------------------------------------ */
-
-const steps = [
-  { n: 1, label: "Address", path: "/address" },
-  { n: 2, label: "Capture", path: "/estimator" },
-  { n: 3, label: "Facets", path: "/estimator" },
-  { n: 4, label: "Pricing", path: "/pricing" },
-  { n: 5, label: "Proposal", path: "/proposal" },
-];
-
-function StepCrumbs({ current }: { current: number }) {
-  const nav = useNavigate();
-  return (
-    <div className="flex items-center gap-1.5">
-      {steps.map((s) => {
-        const done = s.n < current;
-        const active = s.n === current;
-
-        let style: React.CSSProperties = {};
-        if (done) {
-          style = {
-            background: "rgba(255,255,255,0.08)",
-            color: "rgba(255,255,255,0.85)",
-          };
-        } else if (active) {
-          style = {
-            background: "rgba(76,133,229,0.22)",
-            color: "#fff",
-            boxShadow: "inset 0 0 0 1px rgba(76,133,229,0.5)",
-          };
-        } else {
-          style = { color: "rgba(255,255,255,0.45)" };
-        }
-
-        return (
-          <button
-            key={s.n}
-            onClick={() => nav(s.path)}
-            className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold font-mono whitespace-nowrap cursor-pointer border-none hover:opacity-80 transition-opacity"
-            style={style}
-          >
-            {s.n} {s.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 /* ------------------------------------------------------------------ */
 /*  Toggle switch                                                      */
@@ -132,15 +83,15 @@ function ToneChip({
 
 export default function ProposalPage() {
   const navigate = useNavigate();
+  const { address, proposalState, setProposalState } = useEstimatorStore();
+  const { isSyncing, lastSyncedAt, syncNow } = useAutoSync();
 
-  const [coverNote, setCoverNote] = useState(
-    `Hi Maria,\n\nThank you for the opportunity to inspect your roof at 412 W Holloway Ave. After our drone survey and on-site assessment, we recommend a full re-roof using GAF Duration Estate Gray shingles.\n\nThe enclosed proposal covers all materials, labor, disposal, and permits. We've included two financing options for your convenience.\n\nWe'd love to get you on the schedule before the rainy season. Feel free to reach out with any questions.\n\nBest regards,\nTeam Holloway Roofing`
-  );
-  const [recipient, setRecipient] = useState("maria.delgado@gmail.com");
-  const [cc, setCc] = useState("office@hollowayroofing.com");
-  const [tone, setTone] = useState(1); // Conversational
-  const [toggles, setToggles] = useState([true, true, true, false]);
-  const [previewTab, setPreviewTab] = useState(0);
+  const { coverNote, recipient, cc, tone, toggles, previewTab } = proposalState;
+  const setCoverNote = (v: string) => setProposalState({ coverNote: v });
+  const setRecipient = (v: string) => setProposalState({ recipient: v });
+  const setCc = (v: string) => setProposalState({ cc: v });
+  const setTone = (v: number) => setProposalState({ tone: v });
+  const setPreviewTab = (v: number) => setProposalState({ previewTab: v });
 
   const toneLabels = ["Formal", "Conversational", "Direct", "Warm"];
   const previewTabs = [
@@ -157,37 +108,29 @@ export default function ProposalPage() {
   ];
 
   const toggleAt = (i: number) =>
-    setToggles((p) => p.map((v, j) => (j === i ? !v : v)));
+    setProposalState({ toggles: toggles.map((v, j) => (j === i ? !v : v)) });
+
+  const handleSend = () => {
+    syncNow();
+    navigate("/finalization");
+  };
 
   return (
     <DarkLayout>
       {/* Nav */}
       <GlassNav>
-        <Link to="/" className="flex items-center gap-3 no-underline shrink-0">
+        <Link to="/" className="shrink-0">
           <BrandMark size={32} />
-          <div className="flex flex-col">
-            <span className="text-[13px] font-semibold text-white leading-tight">
-              Holloway re-roof
-            </span>
-            <span className="text-[10.5px] font-mono text-white/50">
-              EST-2418 &middot; Draft
-            </span>
-          </div>
         </Link>
 
         <NavDivider />
-        <NavMeta label="PROPERTY" value="412 W Holloway Ave · Tampa, FL" />
+        <NavMeta label="PROPERTY" value={address ?? "No address selected"} />
         <NavDivider />
         <StepCrumbs current={5} />
         <NavDivider />
-        <SavedIndicator text="Saved · just now" />
+        <SavedIndicator isSyncing={isSyncing} lastSyncedAt={lastSyncedAt} />
         <NavDivider />
-        <NavGhostButton onClick={() => navigate("/pricing")}>
-          Back to pricing
-        </NavGhostButton>
-        <NavPrimaryButton onClick={() => navigate("/finalization")}>
-          Send to homeowner
-        </NavPrimaryButton>
+        <NavIconButton icon="send" tooltip="Send to homeowner" variant="primary" onClick={handleSend} />
       </GlassNav>
 
       {/* Body */}
@@ -286,7 +229,7 @@ export default function ProposalPage() {
                 link. The proposal locks pricing for 30 days.
               </div>
               <button
-                onClick={() => navigate("/finalization")}
+                onClick={handleSend}
                 className="w-full py-3 bg-blue text-white rounded-xl text-[14px] font-semibold cursor-pointer border-none hover:bg-blue-bright transition-colors"
               >
                 Send proposal &middot; $25,582

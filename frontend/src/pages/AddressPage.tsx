@@ -1,59 +1,23 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import DarkLayout from "../components/layout/DarkLayout";
-import GlassNav from "../components/ui/GlassNav";
+import GlassNav, { NavIconButton, SavedIndicator } from "../components/ui/GlassNav";
 import BrandMark from "../components/ui/BrandMark";
+import StepCrumbs from "../components/ui/StepCrumbs";
 import Scene from "../components/Scene";
 import { useProperties } from "../hooks/useEstimates";
 import { startEstimate } from "../api/estimate";
 import { useEstimatorStore } from "../store/estimatorStore";
 import { toast } from "sonner";
 import type { Property } from "../types/estimate";
+import { useAutoSync } from "../hooks/useAutoSync";
 
-/* ------------------------------------------------------------------ */
-/*  Nav step dots                                                      */
-/* ------------------------------------------------------------------ */
-
-const navSteps = [
-  { num: 1, label: "Address", active: true, path: "/address" },
-  { num: 2, label: "Materials", active: false, path: "/estimator" },
-  { num: 3, label: "Proposal", active: false, path: "/proposal" },
-  { num: 4, label: "Finalize", active: false, path: "/finalization" },
+const ADDRESS_STEPS = [
+  { n: 1, label: "Address", path: "/address" },
+  { n: 2, label: "Materials", path: "/estimator" },
+  { n: 3, label: "Proposal", path: "/proposal" },
+  { n: 4, label: "Finalize", path: "/finalization" },
 ];
-
-function StepDots() {
-  const nav = useNavigate();
-  return (
-    <div className="flex items-center gap-5">
-      {navSteps.map((step, i) => (
-        <button
-          key={step.num}
-          onClick={() => step.active && nav(step.path)}
-          disabled={!step.active}
-          className={`flex items-center gap-2 bg-transparent border-none p-0 ${step.active ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}
-        >
-          {i > 0 && <div className="w-4 h-px bg-white/12" />}
-          <div
-            className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-mono font-bold ${
-              step.active
-                ? "bg-blue-bright text-white"
-                : "bg-white/8 text-white/35 border border-white/10"
-            }`}
-          >
-            {step.num}
-          </div>
-          <span
-            className={`text-[11.5px] font-medium ${
-              step.active ? "text-white" : "text-white/35"
-            }`}
-          >
-            {step.label}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-}
 
 /* ------------------------------------------------------------------ */
 /*  Icons                                                              */
@@ -138,6 +102,7 @@ export default function AddressPage() {
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const { isSyncing, lastSyncedAt, syncNow } = useAutoSync();
 
   const { data: properties = [] } = useProperties(query);
 
@@ -180,6 +145,7 @@ export default function AddressPage() {
         setSatelliteImageUrl(result.satelliteImageUrl);
         setBuildingInsights(result.buildingInsights);
         setEstimateId(result.estimateId);
+        syncNow();
         navigate("/estimator");
       } catch (err) {
         console.error("Failed to load building data:", err);
@@ -260,20 +226,12 @@ export default function AddressPage() {
             <BrandMark size={30} />
           </Link>
 
-          <div className="w-px h-6.5 bg-white/12 ml-3" />
-
           <div className="flex-1 flex justify-center">
-            <StepDots />
+            <StepCrumbs current={1} steps={ADDRESS_STEPS} />
           </div>
 
-          <Link
-            to="/"
-            className="flex items-center justify-center w-9 h-9 bg-transparent border border-white/15 rounded-[10px] no-underline hover:bg-white/5 transition-colors"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M10 3L5 8L10 13" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </Link>
+          <SavedIndicator isSyncing={isSyncing} lastSyncedAt={lastSyncedAt} />
+          <NavIconButton icon="arrow_back" tooltip="Back" onClick={() => navigate("/")} />
         </GlassNav>
       </div>
 

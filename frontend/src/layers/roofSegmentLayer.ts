@@ -1,12 +1,12 @@
-import { PolygonLayer } from "@deck.gl/layers";
+import { GeoJsonLayer } from "@deck.gl/layers";
 import { _TerrainExtension as TerrainExtension } from "@deck.gl/extensions";
 import type { RoofSegment } from "../types/solar";
 
-function segmentToPolygon(
+function segmentToCoords(
   segment: RoofSegment,
-): [number, number, number][] | null {
+): number[][] | null {
   if (segment.polygon && segment.polygon.length >= 3) {
-    return segment.polygon as [number, number, number][];
+    return segment.polygon;
   }
   if (!segment.bounding_box) return null;
   const { sw, ne } = segment.bounding_box;
@@ -15,22 +15,25 @@ function segmentToPolygon(
     [ne.longitude, sw.latitude, 0],
     [ne.longitude, ne.latitude, 0],
     [sw.longitude, ne.latitude, 0],
+    [sw.longitude, sw.latitude, 0],
   ];
 }
 
 function segmentColor(
-  segment: RoofSegment,
   isSelected: boolean,
+  area: number,
 ): [number, number, number, number] {
   if (isSelected) return [56, 104, 198, 180];
-
-  const area = segment.area_sq_ft;
   const t = Math.min(1, Math.max(0, (area - 50) / 500));
-
   const r = Math.round(40 + t * 215);
   const g = Math.round(80 + t * 140);
   const b = Math.round(180 - t * 140);
   return [r, g, b, 140];
+}
+
+interface SegmentFeatureProps {
+  id: number;
+  area: number;
 }
 
 export function createRoofSegmentLayer(
@@ -38,20 +41,37 @@ export function createRoofSegmentLayer(
   selectedIndices: number[],
 ) {
   const selectedSet = new Set(selectedIndices);
-  const withPolygons = segments.filter((s) => s.polygon || s.bounding_box);
 
-  return new PolygonLayer<RoofSegment>({
+  const features = segments
+    .map((seg) => {
+      const coords = segmentToCoords(seg);
+      if (!coords) return null;
+      return {
+        type: "Feature" as const,
+        geometry: {
+          type: "Polygon" as const,
+          coordinates: [coords],
+        },
+        properties: { id: seg.id, area: seg.area_sq_ft },
+      };
+    })
+    .filter((f): f is NonNullable<typeof f> => f !== null);
+
+  return new GeoJsonLayer<SegmentFeatureProps>({
     id: "roof-segments",
-    data: withPolygons,
+    data: {
+      type: "FeatureCollection",
+      features,
+    },
     extensions: [new TerrainExtension()],
-    getPolygon: (d: RoofSegment) => segmentToPolygon(d)!,
-    getFillColor: (d: RoofSegment) => segmentColor(d, selectedSet.has(d.id)),
-    getLineColor: (d: RoofSegment) =>
-      selectedSet.has(d.id)
+    parameters: { depthCompare: "always" },
+    getFillColor: (f) => segmentColor(selectedSet.has(f.properties.id), f.properties.area),
+    getLineColor: (f) =>
+      selectedSet.has(f.properties.id)
         ? [56, 104, 198, 255]
         : [255, 255, 255, 120],
     getLineWidth: 2,
-    lineWidthUnits: "pixels" as const,
+    lineWidthUnits: "pixels",
     filled: true,
     stroked: true,
     pickable: true,
