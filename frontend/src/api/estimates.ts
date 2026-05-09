@@ -32,6 +32,38 @@ export async function startEstimate(address: string): Promise<BackendEstimate> {
   return res.json();
 }
 
+interface AerialOrientationPair {
+  landscapeUri?: string;
+  portraitUri?: string;
+}
+
+export interface AerialVideoResponse {
+  state: "ACTIVE" | "PROCESSING";
+  uris?: {
+    IMAGE?: AerialOrientationPair;
+    MP4_HIGH?: AerialOrientationPair;
+    MP4_MEDIUM?: AerialOrientationPair;
+    MP4_LOW?: AerialOrientationPair;
+    DASH?: AerialOrientationPair;
+    HLS?: AerialOrientationPair;
+  };
+  metadata?: {
+    videoId?: string;
+    address?: string;
+    duration?: string;
+    captureDate?: { year?: number; month?: number; day?: number };
+  };
+}
+
+export async function fetchAerialVideo(address: string): Promise<AerialVideoResponse> {
+  const params = new URLSearchParams({ address });
+  const res = await fetch(`/api/aerial?${params}`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch aerial video: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function fetchEstimates(
   filter: "all" | EstimateStatus = "all",
 ): Promise<{ estimates: Estimate[]; counts: typeof statusCounts; total: number }> {

@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect, type ReactNode, type CSSPrope
 import { useNavigate } from "react-router-dom";
 import HouseModel, { ROOF_FACES, ROOF_META } from "../models/HouseModel";
 import BrandMark from "../components/ui/BrandMark";
-import type { BackendEstimate } from "../api/estimates";
+import { fetchAerialVideo, type BackendEstimate } from "../api/estimates";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -175,6 +175,43 @@ export default function EstimatorPage() {
       /* ignore malformed cache */
     }
   }, []);
+
+  /* -- Aerial View state -- */
+  const [aerialState, setAerialState] = useState<
+    "idle" | "loading" | "active" | "processing" | "error"
+  >("idle");
+  const [aerialVideoUrl, setAerialVideoUrl] = useState<string | null>(null);
+  const [showAerialModal, setShowAerialModal] = useState(false);
+
+  const handleAerialClick = useCallback(async () => {
+    if (!estimate?.address) return;
+
+    if (aerialVideoUrl) {
+      setShowAerialModal(true);
+      return;
+    }
+
+    setAerialState("loading");
+    try {
+      const result = await fetchAerialVideo(estimate.address);
+      const url =
+        result.uris?.MP4_HIGH?.landscapeUri
+        ?? result.uris?.MP4_MEDIUM?.landscapeUri
+        ?? result.uris?.MP4_LOW?.landscapeUri;
+      if (result.state === "ACTIVE" && url) {
+        setAerialVideoUrl(url);
+        setAerialState("active");
+        setShowAerialModal(true);
+      } else if (result.state === "PROCESSING") {
+        setAerialState("processing");
+      } else {
+        setAerialState("error");
+      }
+    } catch (e) {
+      console.error("Aerial fetch failed:", e);
+      setAerialState("error");
+    }
+  }, [estimate?.address, aerialVideoUrl]);
 
   /* -- Drag rotation state -- */
   const dragRef = useRef<{ dragging: boolean; startX: number; startRot: number }>({
@@ -440,6 +477,18 @@ export default function EstimatorPage() {
             alt="Satellite view of property"
             className="w-full rounded-lg border border-hair mb-3"
           />
+        )}
+        {estimate?.address && (
+          <button
+            onClick={handleAerialClick}
+            disabled={aerialState === "loading"}
+            className="w-full mb-3 py-2 px-3 rounded-lg bg-blue text-white text-[11.5px] font-semibold border-none cursor-pointer hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {aerialState === "loading" && "Loading…"}
+            {aerialState === "processing" && "Rendering — retry in a minute"}
+            {aerialState === "error" && "Couldn't load — retry"}
+            {(aerialState === "idle" || aerialState === "active") && "View 3D flyover →"}
+          </button>
         )}
         <div className="text-[10.5px] font-mono text-muted mb-4">
           {estimate?.solar?.total_roof_area_sq_ft != null
@@ -746,6 +795,32 @@ export default function EstimatorPage() {
           ⌘K
         </kbd>
       </button>
+
+      {/* ============================================================ */}
+      {/*  Aerial View modal                                            */}
+      {/* ============================================================ */}
+      {showAerialModal && aerialVideoUrl && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/85 flex items-center justify-center p-8"
+          onClick={() => setShowAerialModal(false)}
+        >
+          <div className="relative" onClick={(e) => e.stopPropagation()}>
+            <video
+              src={aerialVideoUrl}
+              autoPlay
+              loop
+              controls
+              className="max-w-[90vw] max-h-[85vh] rounded-xl shadow-2xl"
+            />
+            <button
+              onClick={() => setShowAerialModal(false)}
+              className="absolute -top-3 -right-3 w-9 h-9 rounded-full bg-white text-ink hover:bg-white/90 cursor-pointer border-none shadow-lg flex items-center justify-center text-[16px] font-semibold"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
