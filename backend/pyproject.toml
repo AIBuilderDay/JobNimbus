@@ -20,3 +20,8 @@ dev = [
     "respx>=0.21",
     "python-dotenv>=1.0.0",
 ]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: live network tests that hit external APIs (Google, EagleView)",
+]

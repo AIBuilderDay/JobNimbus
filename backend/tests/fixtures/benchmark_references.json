@@ -1,0 +1,16 @@
+{
+  "examples": [
+    {"address": "21106 Kenswick Meadows Ct, Humble, TX 77338", "reference_a_sqft": 2443, "reference_b_sqft": 2343, "pitch": "6:12"},
+    {"address": "5914 Copper Lilly Lane, Spring, TX 77389",    "reference_a_sqft": 4391, "reference_b_sqft": 4296, "pitch": "8:12"},
+    {"address": "122 NW 13th Ave, Cape Coral, FL 33993",       "reference_a_sqft": 2917, "reference_b_sqft": 2851, "pitch": "6:12"},
+    {"address": "14132 Trenton Ave, Orland Park, IL 60462",    "reference_a_sqft": 2990, "reference_b_sqft": 2935, "pitch": "4:12"},
+    {"address": "835 S Cobble Creek, Nixa, MO 65714",          "reference_a_sqft": 3070, "reference_b_sqft": 3017, "pitch": "8:12"}
+  ],
+  "test_properties": [
+    {"address": "3561 E 102nd Ct, Thornton, CO 80229"},
+    {"address": "1612 S Canton Ave, Springfield, MO 65802"},
+    {"address": "6310 Laguna Bay Court, Houston, TX 77041"},
+    {"address": "3820 E Rosebrier St, Springfield, MO 65809"},
+    {"address": "1261 20th Street, Newport News, VA 23607"}
+  ]
+}
