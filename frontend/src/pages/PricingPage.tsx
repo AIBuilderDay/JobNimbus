@@ -10,6 +10,8 @@ import GlassNav, {
   NavPrimaryButton,
 } from "../components/ui/GlassNav";
 import { useLineItems } from "../hooks/useEstimates";
+import { useEstimatorStore } from "../store/estimatorStore";
+import { getMaterialById } from "../data/materials";
 
 /* ------------------------------------------------------------------ */
 /*  Step crumbs                                                        */
@@ -174,13 +176,25 @@ function FinancingOption({
 export default function PricingPage() {
   const navigate = useNavigate();
   const { data: lineItems = [] } = useLineItems();
+  const { selectedMaterialId, buildingInsights, selectedSegmentIndices } = useEstimatorStore();
+
+  const selectedMaterial = selectedMaterialId ? getMaterialById(selectedMaterialId) : null;
+
+  const segments = buildingInsights?.segments ?? [];
+  const roofAreaSqFt = selectedSegmentIndices.length > 0
+    ? selectedSegmentIndices.reduce((sum, i) => sum + (segments[i]?.area_sq_ft ?? 0), 0)
+    : buildingInsights?.total_roof_area_sq_ft ?? 0;
+
+  const materialCost = selectedMaterial ? roofAreaSqFt * selectedMaterial.pricePerSf : 14248.1;
+  const laborCost = 3870;
+  const disposalCost = 420;
 
   const [activeTab, setActiveTab] = useState(0);
   const [marginPct, setMarginPct] = useState(38);
   const [toggles, setToggles] = useState([true, true, false]);
   const [financing, setFinancing] = useState([true, true, false, false]);
 
-  const subtotal = 18538.1;
+  const subtotal = materialCost + laborCost + disposalCost;
   const grossProfit = Math.round(subtotal * (marginPct / (100 - marginPct)));
   const customerTotal = subtotal + grossProfit;
 
@@ -326,9 +340,9 @@ export default function PricingPage() {
           <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(21,41,82,0.08)] p-5 flex flex-col gap-4">
             {/* Subtotal rows */}
             {[
-              { label: "Materials", value: "$14,248.10" },
-              { label: "Labor", value: "$3,870.00" },
-              { label: "Disposal & permits", value: "$420.00" },
+              { label: selectedMaterial ? `Materials · ${selectedMaterial.name} ${selectedMaterial.sub}` : "Materials", value: `$${materialCost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+              { label: "Labor", value: `$${laborCost.toLocaleString("en-US", { minimumFractionDigits: 2 })}` },
+              { label: "Disposal & permits", value: `$${disposalCost.toLocaleString("en-US", { minimumFractionDigits: 2 })}` },
             ].map((r) => (
               <div
                 key={r.label}

@@ -10,8 +10,9 @@ const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
 interface Props {
   location: { lat: number; lng: number } | null;
   buildingInsights: BuildingInsightsResponse | null;
-  selectedIndex: number;
-  onSelectSegment: (segment: RoofSegment | null, index: number) => void;
+  selectedIndices: number[];
+  onToggleSegment: (index: number) => void;
+  onClearSegments: () => void;
   onCreditsUpdate: (credits: string) => void;
   topDown?: boolean;
 }
@@ -25,8 +26,9 @@ function getCursor({ isHovering }: { isHovering: boolean }) {
 export default memo(function Scene({
   location,
   buildingInsights,
-  selectedIndex,
-  onSelectSegment,
+  selectedIndices,
+  onToggleSegment,
+  onClearSegments,
   onCreditsUpdate,
   topDown = false,
 }: Props) {
@@ -80,6 +82,7 @@ export default memo(function Scene({
         },
         onTilesetLoad: handleTilesetLoad,
         maximumScreenSpaceError: 8,
+        operation: "terrain+draw",
       }),
     [handleTilesetLoad]
   );
@@ -88,9 +91,9 @@ export default memo(function Scene({
     if (!buildingInsights) return null;
     return createRoofSegmentLayer(
       buildingInsights.segments,
-      selectedIndex
+      selectedIndices
     );
-  }, [buildingInsights, selectedIndex]);
+  }, [buildingInsights, selectedIndices]);
 
   const layers = useMemo(
     () => (roofLayer ? [tileLayer, roofLayer] : [tileLayer]),
@@ -102,12 +105,12 @@ export default memo(function Scene({
       if (info.layer?.id === "roof-segments" && info.object) {
         const segs = buildingInsights!.segments;
         const idx = segs.indexOf(info.object as RoofSegment);
-        onSelectSegment(info.object as RoofSegment, idx);
+        onToggleSegment(idx);
       } else {
-        onSelectSegment(null, -1);
+        onClearSegments();
       }
     },
-    [buildingInsights, onSelectSegment]
+    [buildingInsights, onToggleSegment, onClearSegments]
   );
 
   return (

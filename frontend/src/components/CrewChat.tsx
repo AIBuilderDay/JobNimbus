@@ -147,6 +147,7 @@ export default function CrewChat() {
           background: "linear-gradient(135deg, #4C85E5 0%, #3868C6 100%)",
         }}
       >
+        <span className="material-symbols-rounded text-[16px]">star</span>
         Ask Bob
         <kbd className="font-mono text-[10px] text-white/70 bg-white/15 py-0.5 px-1.5 rounded ml-1">
           ⌘K

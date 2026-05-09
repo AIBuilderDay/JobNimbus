@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useState, useRef, useCallback, type CSSProperties } from "react";
 
 interface BBoxCorner {
   latitude: number;
@@ -71,6 +71,33 @@ export default function RoofBlueprint({
   const padding = Math.max(12, Math.round(Math.min(width, height) * 0.06));
   const gridId = dark ? "blueprint-grid-dark" : "blueprint-grid-light";
 
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const dragRef = useRef<{ active: boolean; startX: number; startY: number; panX: number; panY: number }>({ active: false, startX: 0, startY: 0, panX: 0, panY: 0 });
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    setZoom((z) => Math.min(5, Math.max(0.3, z - e.deltaY * 0.001)));
+  }, []);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    dragRef.current = { active: true, startX: e.clientX, startY: e.clientY, panX: pan.x, panY: pan.y };
+  }, [pan]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!dragRef.current.active) return;
+    const dx = e.clientX - dragRef.current.startX;
+    const dy = e.clientY - dragRef.current.startY;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      setPan({ x: dragRef.current.panX + dx, y: dragRef.current.panY + dy });
+    }
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    dragRef.current.active = false;
+  }, []);
+
   if (segments.length === 0) {
     return (
       <div style={{ width, height, display: "flex", alignItems: "center", justifyContent: "center", color: c.textSecondary, fontSize: 13, background: c.bg }}>
@@ -112,11 +139,19 @@ export default function RoofBlueprint({
   }
 
   return (
+    <div
+      style={{ ...style, overflow: "hidden", cursor: dragRef.current.active ? "grabbing" : "grab" }}
+      onWheel={handleWheel}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+    >
     <svg
       viewBox={`0 0 ${width} ${height}`}
       width={width}
       height={height}
-      style={style}
+      style={{ transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transformOrigin: "center center" }}
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
@@ -185,5 +220,6 @@ export default function RoofBlueprint({
       })}
 
     </svg>
+    </div>
   );
 }

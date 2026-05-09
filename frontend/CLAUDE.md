@@ -2,7 +2,7 @@
 
 Frontend conventions. Read this before editing anything under `frontend/`. Repo-level conventions live in [../CLAUDE.md](../CLAUDE.md).
 
-Stack: React 19, Vite 8, TypeScript, Tailwind v4, TanStack Query, Zustand, Zod, react-router-dom v7, deck.gl + react-three-fiber for the 3D scene. `pnpm` for packages.
+Stack: React 19, Vite 8, TypeScript, Tailwind v4, TanStack Query, Zustand, Zod, react-router-dom v7, deck.gl for the satellite map. `pnpm` for packages.
 
 ## Env vars — only via `import.meta.env.VITE_*`
 

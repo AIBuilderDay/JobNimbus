@@ -17,6 +17,7 @@ export const RoofSegmentSchema = z.object({
     ne: LatLng,
   }).nullable().optional(),
   center: LatLng.nullable().optional(),
+  polygon: z.array(z.array(z.number()).length(3)).nullable().optional(),
 });
 
 export const BuildingInsightsSchema = z.object({
