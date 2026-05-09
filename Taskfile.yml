@@ -49,3 +49,20 @@ tasks:
     desc: Stop backend container
     cmds:
       - docker stop jobnimbus-backend
+
+  backend:logs:
+    desc: Tail logs from running backend container
+    cmds:
+      - docker logs -f jobnimbus-backend
+
+  backend:shell:
+    desc: Exec into running backend container
+    cmds:
+      - docker exec -it jobnimbus-backend /bin/sh
+
+  backend:env-check:
+    desc: Print loaded settings (secrets redacted) — sanity check
+    dir: backend
+    cmds:
+      - |
+        op run --env-file=.env -- uv run python -c "from settings import settings; print({k: ('***' if any(s in k for s in ['KEY','TOKEN','SECRET']) else v) for k,v in settings.model_dump().items()})"
