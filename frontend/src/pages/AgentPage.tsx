@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import BrandMark from "../components/ui/BrandMark";
 import GlassNav, { NavIconButton } from "../components/ui/GlassNav";
@@ -313,14 +315,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
       <div className="flex-1 min-w-0 space-y-2">
         {msg.segments.map((seg, idx) => {
           if (seg.kind === "text") {
-            return (
-              <div
-                key={idx}
-                className="prose-roofing text-[13.5px] leading-[1.6] text-ink whitespace-pre-wrap"
-              >
-                {renderMarkdownLite(seg.text)}
-              </div>
-            );
+            return <Markdown key={idx} text={seg.text} />;
           }
           const tc = msg.toolCalls[seg.toolId];
           if (!tc) return null;
@@ -474,31 +469,117 @@ function FileGlyph({
 }
 
 /**
- * Tiny markdown-like renderer — bold (**...**), inline code (`...`), and
- * preserves newlines. We don't pull in a full markdown lib for one chat page.
+ * Markdown renderer for assistant text. GFM enabled so Claude's tables /
+ * task-lists / strikethrough render correctly. Each element is styled
+ * directly so we don't need @tailwindcss/typography for one chat page.
  */
-function renderMarkdownLite(text: string): React.ReactNode[] {
-  const out: React.ReactNode[] = [];
-  const tokens = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
-  tokens.forEach((tok, i) => {
-    if (tok.startsWith("**") && tok.endsWith("**")) {
-      out.push(
-        <strong key={i} className="font-semibold text-ink">
-          {tok.slice(2, -2)}
-        </strong>,
-      );
-    } else if (tok.startsWith("`") && tok.endsWith("`")) {
-      out.push(
-        <code
-          key={i}
-          className="font-mono text-[12px] px-1 py-0.5 rounded bg-paper-2 border border-hair"
-        >
-          {tok.slice(1, -1)}
-        </code>,
-      );
-    } else {
-      out.push(<span key={i}>{tok}</span>);
-    }
-  });
-  return out;
+function Markdown({ text }: { text: string }) {
+  return (
+    <div className="text-[13.5px] leading-[1.6] text-ink space-y-2">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p: ({ children }) => <p className="leading-[1.6]">{children}</p>,
+          h1: ({ children }) => (
+            <h1 className="font-serif text-[22px] leading-tight text-ink mt-3 mb-1">
+              {children}
+            </h1>
+          ),
+          h2: ({ children }) => (
+            <h2 className="font-serif text-[18px] leading-tight text-ink mt-3 mb-1">
+              {children}
+            </h2>
+          ),
+          h3: ({ children }) => (
+            <h3 className="font-semibold text-[15px] text-ink mt-2 mb-1">
+              {children}
+            </h3>
+          ),
+          h4: ({ children }) => (
+            <h4 className="font-semibold text-[14px] text-ink mt-2 mb-0.5">
+              {children}
+            </h4>
+          ),
+          strong: ({ children }) => (
+            <strong className="font-semibold text-ink">{children}</strong>
+          ),
+          em: ({ children }) => <em className="italic">{children}</em>,
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="text-blue underline underline-offset-2 hover:text-blue-bright"
+            >
+              {children}
+            </a>
+          ),
+          ul: ({ children }) => (
+            <ul className="list-disc pl-5 space-y-1 marker:text-muted-2">
+              {children}
+            </ul>
+          ),
+          ol: ({ children }) => (
+            <ol className="list-decimal pl-5 space-y-1 marker:text-muted-2">
+              {children}
+            </ol>
+          ),
+          li: ({ children }) => <li className="leading-[1.55]">{children}</li>,
+          blockquote: ({ children }) => (
+            <blockquote className="border-l-2 border-blue/30 pl-3 text-muted italic">
+              {children}
+            </blockquote>
+          ),
+          hr: () => <hr className="border-hair my-3" />,
+          code: ({ className, children, ...rest }) => {
+            // ReactMarkdown gives `inline` for inline code via class absence
+            // — block code shows up as `language-xyz`.
+            const isBlock = /language-/.test(className || "");
+            if (isBlock) {
+              return (
+                <code className={`${className} font-mono text-[12px]`} {...rest}>
+                  {children}
+                </code>
+              );
+            }
+            return (
+              <code
+                className="font-mono text-[12px] px-1 py-0.5 rounded bg-paper-2 border border-hair"
+                {...rest}
+              >
+                {children}
+              </code>
+            );
+          },
+          pre: ({ children }) => (
+            <pre className="bg-paper-2 border border-hair rounded-lg p-3 overflow-x-auto text-[12px] leading-snug">
+              {children}
+            </pre>
+          ),
+          table: ({ children }) => (
+            <div className="overflow-x-auto rounded-lg border border-hair">
+              <table className="w-full text-[12.5px] border-collapse">
+                {children}
+              </table>
+            </div>
+          ),
+          thead: ({ children }) => (
+            <thead className="bg-paper-2 text-ink/80">{children}</thead>
+          ),
+          th: ({ children }) => (
+            <th className="text-left font-semibold px-3 py-2 border-b border-hair">
+              {children}
+            </th>
+          ),
+          td: ({ children }) => (
+            <td className="px-3 py-2 border-b border-hair last:border-b-0 align-top">
+              {children}
+            </td>
+          ),
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
 }
