@@ -35,7 +35,9 @@ def _normalize_address(address: str) -> str:
 
 
 def init_db() -> None:
-    log.info("init_db path=%s", _db_path())
+    db = _db_path()
+    log.info("init_db path=%s", db)
+    Path(db).parent.mkdir(parents=True, exist_ok=True)
     schema = _SCHEMA_PATH.read_text()
     with get_connection() as conn:
         conn.executescript(schema)

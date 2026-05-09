@@ -34,7 +34,7 @@ async function fetchAssistantReply(history: Message[]): Promise<string> {
     last.includes("cost") ||
     last.includes("margin")
   ) {
-    return "To adjust pricing:\n\n1. Go to **Step 4 · Pricing** in the nav bar\n2. Review the auto-generated line items\n3. Drag the margin slider (recommended 32–42%)\n4. Toggle warranty and certification options\n\nAll figures lock when you continue to the proposal.";
+    return "To adjust pricing:\n\n1. Go to **Step 3 · Pricing** in the nav bar\n2. Review the auto-generated line items\n3. Drag the margin slider (recommended 32–42%)\n4. Toggle warranty and certification options\n\nAll figures lock when you continue to the proposal.";
   }
 
   if (
@@ -42,7 +42,7 @@ async function fetchAssistantReply(history: Message[]): Promise<string> {
     last.includes("send") ||
     last.includes("email")
   ) {
-    return "To send a proposal:\n\n1. Go to **Step 5 · Proposal**\n2. Edit the AI-drafted cover note\n3. Set the recipient and CC emails\n4. Pick a tone and toggle attachment options\n5. Preview the PDF on the right\n6. Click **Send proposal**\n\nPricing locks for 30 days once sent.";
+    return "To send a proposal:\n\n1. Go to **Step 4 · Proposal**\n2. Edit the AI-drafted cover note\n3. Set the recipient and CC emails\n4. Pick a tone and toggle attachment options\n5. Preview the PDF on the right\n6. Click **Send proposal**\n\nPricing locks for 30 days once sent.";
   }
 
   if (

@@ -99,7 +99,7 @@ export const properties: Property[] = [
 ];
 
 export const lineItems: LineItem[] = [
-  { color: "#5a5d62", name: "Duration · Estate Gray shingles", detail: "22.4 sq · 12% waste · 6 facets", qty: "25.1 sq", unitPrice: "$485.00", total: "$12,173.50", category: "materials" },
+  { color: "#5a5d62", name: "Duration · Estate Gray shingles", detail: "2,240 sf · 12% waste · 6 facets", qty: "2,510 sf", unitPrice: "$1.85", total: "$4,643.50", category: "materials" },
   { color: "#3a3d44", name: "Ridge cap · CertainTeed Mountain Ridge", detail: "68 lf · matched to field", qty: "68 lf", unitPrice: "$8.40", total: "$571.20", category: "materials" },
   { color: "#e8eaec", name: "Ice & water shield · 2 courses", detail: "Eaves · valleys · low-slope", qty: "6 rolls", unitPrice: "$94.00", total: "$564.00", category: "materials" },
   { color: "#a8aeb6", name: "Synthetic underlayment", detail: "22.4 sq · 1 layer · 10 sq rolls", qty: "3 rolls", unitPrice: "$112.00", total: "$336.00", category: "materials" },
@@ -113,10 +113,10 @@ export const lineItems: LineItem[] = [
 
 export const catalog: CatalogItem[] = [
   // ── Materials ──
-  { id: "mat-shingle-3tab", name: "3-Tab Shingles", detail: "Standard 3-tab asphalt shingles · 25 yr warranty", color: "#5a5d62", defaultUnit: "sq", defaultUnitPrice: 320, category: "materials" },
-  { id: "mat-shingle-arch", name: "Architectural Shingles", detail: "Dimensional laminated shingles · 30 yr warranty", color: "#4a4d52", defaultUnit: "sq", defaultUnitPrice: 485, category: "materials" },
-  { id: "mat-shingle-designer", name: "Designer Shingles", detail: "Premium luxury shingles · lifetime warranty", color: "#3a3d44", defaultUnit: "sq", defaultUnitPrice: 680, category: "materials" },
-  { id: "mat-shingle-impact", name: "Impact Resistant Shingles", detail: "Class 4 IR rated · hail resistant", color: "#5e6268", defaultUnit: "sq", defaultUnitPrice: 560, category: "materials" },
+  { id: "mat-shingle-3tab", name: "3-Tab Shingles", detail: "Standard 3-tab asphalt shingles · 25 yr warranty", color: "#5a5d62", defaultUnit: "sf", defaultUnitPrice: 1.50, category: "materials" },
+  { id: "mat-shingle-arch", name: "Architectural Shingles", detail: "Dimensional laminated shingles · 30 yr warranty", color: "#4a4d52", defaultUnit: "sf", defaultUnitPrice: 1.85, category: "materials" },
+  { id: "mat-shingle-designer", name: "Designer Shingles", detail: "Premium luxury shingles · lifetime warranty", color: "#3a3d44", defaultUnit: "sf", defaultUnitPrice: 2.40, category: "materials" },
+  { id: "mat-shingle-impact", name: "Impact Resistant Shingles", detail: "Class 4 IR rated · hail resistant", color: "#5e6268", defaultUnit: "sf", defaultUnitPrice: 2.10, category: "materials" },
   { id: "mat-ridge-cap", name: "Ridge Cap Shingles", detail: "Pre-bent hip & ridge shingles", color: "#3a3d44", defaultUnit: "lf", defaultUnitPrice: 8.4, category: "materials" },
   { id: "mat-starter-strip", name: "Starter Strip Shingles", detail: "Pre-cut starter for eaves & rakes", color: "#5a5d62", defaultUnit: "lf", defaultUnitPrice: 3.8, category: "materials" },
   { id: "mat-ice-water", name: "Ice & Water Shield", detail: "Self-adhering membrane · 36\" wide roll", color: "#e8eaec", defaultUnit: "roll", defaultUnitPrice: 94, category: "materials" },

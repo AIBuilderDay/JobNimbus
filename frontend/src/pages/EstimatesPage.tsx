@@ -420,7 +420,7 @@ export default function EstimatesPage() {
       </GlassNav>
 
       {/* ---- Content ---- */}
-      <main className="relative z-[2] max-w-[1320px] mx-auto px-6 pt-14 pb-20">
+      <main className="relative z-[2] max-w-[1320px] mx-auto px-6 pt-24 pb-20">
         {/* Header */}
         <div className="flex items-end justify-between mb-7 gap-4 flex-wrap">
           <div>

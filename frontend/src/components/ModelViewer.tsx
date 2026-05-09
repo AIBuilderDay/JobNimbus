@@ -147,23 +147,6 @@ export default function ModelViewer({ address, buildingInsights, onClearSegments
           />
         </Canvas>
       </div>
-
-      {showRotationSlider && (
-        <div className="absolute bottom-4 left-4 z-20 bg-black/60 backdrop-blur-sm rounded-lg px-4 py-3">
-          <label className="text-white/70 text-xs font-mono block mb-1">
-            Rotation: {rotationDeg}°
-          </label>
-          <input
-            type="range"
-            min={0}
-            max={360}
-            step={1}
-            value={rotationDeg}
-            onChange={(e) => setRotationDeg(Number(e.target.value))}
-            className="w-48 accent-blue-500"
-          />
-        </div>
-      )}
     </div>
   );
 }

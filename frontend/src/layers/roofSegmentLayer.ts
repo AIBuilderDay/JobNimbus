@@ -2,14 +2,28 @@ import { GeoJsonLayer } from "@deck.gl/layers";
 import { _TerrainExtension as TerrainExtension } from "@deck.gl/extensions";
 import type { RoofSegment } from "../types/solar";
 
+function isValidCoord(c: number[]): boolean {
+  const [lng, lat] = c;
+  return (
+    Number.isFinite(lng) && Number.isFinite(lat) &&
+    lat >= -90 && lat <= 90 &&
+    lng >= -180 && lng <= 180
+  );
+}
+
 function segmentToCoords(
   segment: RoofSegment,
 ): number[][] | null {
   if (segment.polygon && segment.polygon.length >= 3) {
-    return segment.polygon;
+    if (segment.polygon.every(isValidCoord)) return segment.polygon;
+    return null;
   }
   if (!segment.bounding_box) return null;
   const { sw, ne } = segment.bounding_box;
+  if (
+    !Number.isFinite(sw.latitude) || !Number.isFinite(sw.longitude) ||
+    !Number.isFinite(ne.latitude) || !Number.isFinite(ne.longitude)
+  ) return null;
   return [
     [sw.longitude, sw.latitude, 0],
     [ne.longitude, sw.latitude, 0],

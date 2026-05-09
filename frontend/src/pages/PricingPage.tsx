@@ -12,8 +12,20 @@ import StepCrumbs from "../components/ui/StepCrumbs";
 import { useLineItems, useCatalog, useMaterials } from "../hooks/useEstimates";
 import { useEstimatorStore } from "../store/estimatorStore";
 import { useAutoSync } from "../hooks/useAutoSync";
+import { usePricing, useUpdatePricing } from "../hooks/usePricing";
+import { useBenchmark } from "../hooks/useBenchmark";
 import type { LineItem, LineItemCategory, CatalogItem } from "../types/estimate";
 
+function parseDollar(s: string): number {
+  return Number(s.replace(/[^0-9.\-]/g, "")) || 0;
+}
+
+function fmtUSD(cents: number): string {
+  return (cents / 100).toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+  });
+}
 
 /* ------------------------------------------------------------------ */
 /*  Toggle switch                                                      */
@@ -262,14 +274,15 @@ function AddItemModal({
 export default function PricingPage() {
   const navigate = useNavigate();
   const { data: fetchedLineItems = [] } = useLineItems();
-  const { address, selectedMaterialId, buildingInsights, selectedSegmentIndices, pricingState, setPricingState } = useEstimatorStore();
+  const { address, estimateId, selectedMaterialId, buildingInsights, selectedSegmentIndices, pricingState, setPricingState } = useEstimatorStore();
   const { isSyncing, lastSyncedAt, syncNow } = useAutoSync();
   const { data: materialsMap } = useMaterials();
+  const { data: serverPricing } = usePricing(estimateId);
+  const updatePricing = useUpdatePricing(estimateId);
+  const { data: benchmarkData, refetch: refetchBenchmark, isFetching: benchmarkFetching } = useBenchmark();
   const [managedItems, setManagedItems] = useState<LineItem[] | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [checkedIndices, setCheckedIndices] = useState<Set<number>>(new Set());
-
-  const allLineItems = managedItems ?? fetchedLineItems;
 
   const selectedMaterial = useMemo(() => {
     if (!selectedMaterialId || !materialsMap) return null;
@@ -285,22 +298,58 @@ export default function PricingPage() {
     ? selectedSegmentIndices.reduce((sum, i) => sum + (segments[i]?.area_sq_ft ?? 0), 0)
     : buildingInsights?.total_roof_area_sq_ft ?? 0;
 
+  const seededLineItems = useMemo(() => {
+    const nonMaterialItems = fetchedLineItems.filter((i) => i.category !== "materials");
+    if (selectedMaterial && roofAreaSqFt > 0) {
+      const total = roofAreaSqFt * selectedMaterial.pricePerSf;
+      nonMaterialItems.unshift({
+        color: selectedMaterial.swatch,
+        name: selectedMaterial.name,
+        detail: selectedMaterial.sub,
+        qty: `${Math.round(roofAreaSqFt).toLocaleString()} sf`,
+        unitPrice: selectedMaterial.price,
+        total: `$${total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        category: "materials",
+      });
+    }
+    return nonMaterialItems;
+  }, [fetchedLineItems, selectedMaterial, roofAreaSqFt]);
+
+  const allLineItems = managedItems ?? seededLineItems;
+
+  const categorySubtotals = useMemo(() => {
+    const sums: Record<LineItemCategory, number> = { materials: 0, labor: 0, addons: 0, disposal: 0 };
+    for (const item of allLineItems) sums[item.category] += parseDollar(item.total);
+    return sums;
+  }, [allLineItems]);
+
   const materialCost = selectedMaterial ? roofAreaSqFt * selectedMaterial.pricePerSf : 14248.1;
-  const laborCost = 3870;
-  const disposalCost = 420;
+  const laborCost = categorySubtotals.labor || 3870;
+  const disposalCost = categorySubtotals.disposal || 420;
 
   const { activeTab, marginPct, toggles, financing } = pricingState;
   const setActiveTab = (v: number) => setPricingState({ activeTab: v });
   const setMarginPct = (v: number) => setPricingState({ marginPct: v });
   const setFinancing = (v: number) => setPricingState({ financing: v });
 
-  const subtotal = materialCost + laborCost + disposalCost;
+  const addonsCost = categorySubtotals.addons;
+  const subtotal = materialCost + laborCost + addonsCost + disposalCost;
   const grossProfit = Math.round(subtotal * (marginPct / (100 - marginPct)));
-  const customerTotal = subtotal + grossProfit;
+  const salesTaxPct = 7.5;
+  const taxableAmount = materialCost + addonsCost + grossProfit;
+  const salesTax = Math.round(taxableAmount * (salesTaxPct / 100) * 100) / 100;
+  const customerTotal = serverPricing
+    ? serverPricing.customer_total_cents / 100
+    : subtotal + grossProfit + salesTax;
 
   const toggleAt = (i: number) =>
     setPricingState({ toggles: toggles.map((v, j) => (j === i ? !v : v)) });
   const selectFinancing = (i: number) => setFinancing(i);
+
+  const handleMarginChange = (v: number) => {
+    setMarginPct(v);
+    if (estimateId) updatePricing.mutate({ margin_pct: v });
+  };
 
   const tabCounts = tabCategories.map(
     (cat) => allLineItems.filter((item) => item.category === cat).length,
@@ -379,7 +428,7 @@ export default function PricingPage() {
         <NavDivider />
         <NavMeta label="PROPERTY" value={address ?? "No address selected"} />
         <NavDivider />
-        <StepCrumbs current={2} />
+        <StepCrumbs current={3} />
         <NavDivider />
         <SavedIndicator isSyncing={isSyncing} lastSyncedAt={lastSyncedAt} />
         <NavDivider />
@@ -394,7 +443,7 @@ export default function PricingPage() {
           {/* Eyebrow + title */}
           <div>
             <div className="text-[11px] font-mono text-white/55 uppercase tracking-wider">
-              FINANCING &middot; STEP 4 OF 5
+              PRICING &middot; STEP 3 OF 5
             </div>
             <h1 className="font-serif text-[52px] leading-[1.04] font-normal tracking-[-1.5px] text-white mt-1.5">
               Financing
@@ -465,7 +514,7 @@ export default function PricingPage() {
                       type="checkbox"
                       checked={checkedIndices.has(globalIdx)}
                       onChange={() => toggleCheck(globalIdx)}
-                      className="w-4 h-4 accent-[#4C85E5] cursor-pointer"
+                      className="w-4 h-4 cursor-pointer appearance-none border-2 border-[#d0d5dd] rounded bg-white checked:border-[#4C85E5] checked:bg-[url('data:image/svg+xml,%3Csvg%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22%234C85E5%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M12.207%204.793a1%201%200%20010%201.414l-5%205a1%201%200%2001-1.414%200l-2-2a1%201%200%20011.414-1.414L6.5%209.086l4.293-4.293a1%201%200%20011.414%200z%22/%3E%3C/svg%3E')] checked:bg-white checked:bg-center checked:bg-no-repeat"
                     />
                   </span>
                   <div className="flex items-center gap-3">
@@ -497,6 +546,24 @@ export default function PricingPage() {
                   </span>
                 </div>
               ))
+            )}
+
+            {/* Tab subtotal */}
+            {filteredItems.length > 0 && (
+              <div
+                className="grid items-center px-5 py-3 border-t border-hair bg-blue-soft/20"
+                style={{ gridTemplateColumns: "36px 1fr 92px 92px 110px" }}
+              >
+                <span />
+                <span className="text-[13px] font-semibold text-ink">
+                  {tabLabels[activeTab]} subtotal
+                </span>
+                <span />
+                <span />
+                <span className="text-[13px] font-mono font-bold text-ink text-right">
+                  ${categorySubtotals[tabCategories[activeTab]].toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
             )}
 
             {/* Add line */}
@@ -541,6 +608,7 @@ export default function PricingPage() {
             {[
               { label: selectedMaterial ? `Materials · ${selectedMaterial.name} ${selectedMaterial.sub}` : "Materials", value: `$${materialCost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
               { label: "Labor", value: `$${laborCost.toLocaleString("en-US", { minimumFractionDigits: 2 })}` },
+              ...(addonsCost > 0 ? [{ label: "Add-ons", value: `$${addonsCost.toLocaleString("en-US", { minimumFractionDigits: 2 })}` }] : []),
               { label: "Disposal & permits", value: `$${disposalCost.toLocaleString("en-US", { minimumFractionDigits: 2 })}` },
             ].map((r) => (
               <div
@@ -576,7 +644,7 @@ export default function PricingPage() {
                 min={20}
                 max={55}
                 value={marginPct}
-                onChange={(e) => setMarginPct(Number(e.target.value))}
+                onChange={(e) => handleMarginChange(Number(e.target.value))}
                 className="w-full mt-3 accent-[#4C85E5] cursor-pointer"
               />
               <div className="flex justify-between text-[10px] font-mono text-muted mt-1">
@@ -591,10 +659,14 @@ export default function PricingPage() {
             {/* Sales tax */}
             <div className="flex justify-between text-[13px] text-ink">
               <span>
-                Sales tax · 7.5%{" "}
+                Sales tax · {salesTaxPct}%{" "}
                 <span className="text-muted text-[11px]">labor exempt</span>
               </span>
-              <span className="font-mono">$0.00</span>
+              <span className="font-mono">
+                {serverPricing
+                  ? fmtUSD(serverPricing.sales_tax_cents)
+                  : `$${salesTax.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              </span>
             </div>
 
             {/* Grand total */}
@@ -604,16 +676,74 @@ export default function PricingPage() {
                   <div className="text-[13px] font-semibold text-ink">
                     Customer total
                   </div>
-                  <div className="text-[11px] text-muted mt-0.5">
-                    {financing === 0 && "$0 down · 84mo"}
-                    {financing === 1 && "$2,500 down · 60mo"}
-                    {financing === 2 && "Same as cash · 18mo"}
-                    {financing === 3 && "Pay in full · 3% discount"}
-                  </div>
                 </div>
                 <div className="text-[36px] font-mono font-bold text-ink leading-none tracking-tight">
                   ${Math.round(financing === 3 ? customerTotal * 0.97 : customerTotal).toLocaleString()}
                 </div>
+              </div>
+
+              {/* Financing breakdown */}
+              <div className="mt-3 rounded-xl bg-blue-soft/50 p-3.5 flex flex-col gap-2">
+                {financing === 0 && (
+                  <>
+                    <div className="flex justify-between text-[12px] text-ink">
+                      <span>Down payment</span>
+                      <span className="font-mono font-semibold">$0</span>
+                    </div>
+                    <div className="flex justify-between text-[12px] text-ink">
+                      <span>84 months @ 9.99% APR</span>
+                      <span className="font-mono font-semibold">${monthlyPayment(customerTotal, 0, 9.99, 84)}/mo</span>
+                    </div>
+                    <div className="flex justify-between text-[11px] text-muted border-t border-hair/60 pt-2 mt-0.5">
+                      <span>Total financed cost</span>
+                      <span className="font-mono">${(Number(monthlyPayment(customerTotal, 0, 9.99, 84).replace(/,/g, "")) * 84).toLocaleString()}</span>
+                    </div>
+                  </>
+                )}
+                {financing === 1 && (
+                  <>
+                    <div className="flex justify-between text-[12px] text-ink">
+                      <span>Down payment</span>
+                      <span className="font-mono font-semibold">$2,500</span>
+                    </div>
+                    <div className="flex justify-between text-[12px] text-ink">
+                      <span>60 months @ 7.99% APR</span>
+                      <span className="font-mono font-semibold">${monthlyPayment(customerTotal, 2500, 7.99, 60)}/mo</span>
+                    </div>
+                    <div className="flex justify-between text-[11px] text-muted border-t border-hair/60 pt-2 mt-0.5">
+                      <span>Total financed cost</span>
+                      <span className="font-mono">${(2500 + Number(monthlyPayment(customerTotal, 2500, 7.99, 60).replace(/,/g, "")) * 60).toLocaleString()}</span>
+                    </div>
+                  </>
+                )}
+                {financing === 2 && (
+                  <>
+                    <div className="flex justify-between text-[12px] text-ink">
+                      <span>Down payment</span>
+                      <span className="font-mono font-semibold">$0</span>
+                    </div>
+                    <div className="flex justify-between text-[12px] text-ink">
+                      <span>18 months @ 0% APR</span>
+                      <span className="font-mono font-semibold">${monthlyPayment(customerTotal, 0, 0, 18)}/mo</span>
+                    </div>
+                    <div className="flex justify-between text-[11px] text-muted border-t border-hair/60 pt-2 mt-0.5">
+                      <span>Total cost (same as cash)</span>
+                      <span className="font-mono">${Math.round(customerTotal).toLocaleString()}</span>
+                    </div>
+                  </>
+                )}
+                {financing === 3 && (
+                  <>
+                    <div className="flex justify-between text-[12px] text-ink">
+                      <span>Pay-in-full discount (3%)</span>
+                      <span className="font-mono font-semibold text-green-600">−${Math.round(customerTotal * 0.03).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-[11px] text-muted border-t border-hair/60 pt-2 mt-0.5">
+                      <span>Amount due</span>
+                      <span className="font-mono">${Math.round(customerTotal * 0.97).toLocaleString()}</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -662,6 +792,90 @@ export default function PricingPage() {
                 onClick={() => selectFinancing(3)}
               />
             </div>
+          </div>
+
+          {/* Benchmark results panel */}
+          <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(21,41,82,0.08)] p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="text-[15px] font-semibold text-ink">
+                  Live measurement benchmark
+                </div>
+                {benchmarkData && (
+                  <div className="text-[12px] text-muted mt-0.5 font-mono">
+                    {benchmarkData.pass_count}/{benchmarkData.total} within &plusmn;{benchmarkData.tolerance_pct}%
+                    {benchmarkData.qualified && (
+                      <span className="ml-2 text-[10px] font-semibold text-green-600 bg-green-50 rounded-full px-2 py-0.5">
+                        QUALIFIED
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => refetchBenchmark()}
+                disabled={benchmarkFetching}
+                className="text-[11px] font-semibold text-blue cursor-pointer bg-transparent border border-hair rounded-lg px-3 py-1.5 hover:bg-blue-soft/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {benchmarkFetching ? "Loading…" : "Refresh"}
+              </button>
+            </div>
+
+            {!benchmarkData ? (
+              <div className="text-center py-6 text-[13px] text-muted">
+                {benchmarkFetching ? "Running benchmark…" : "Benchmark data unavailable"}
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-lg border border-hair">
+                {/* Table header */}
+                <div
+                  className="grid items-center px-3 py-2 text-[9px] font-mono text-muted uppercase tracking-wider bg-paper-2 border-b border-hair"
+                  style={{ gridTemplateColumns: "1fr 80px 80px 80px 60px 36px" }}
+                >
+                  <span>ADDRESS</span>
+                  <span className="text-right">REF A</span>
+                  <span className="text-right">REF B</span>
+                  <span className="text-right">MEASURED</span>
+                  <span className="text-right">ERROR</span>
+                  <span />
+                </div>
+
+                {benchmarkData.results.map((r, i) => (
+                  <div
+                    key={i}
+                    className="grid items-center px-3 py-2 text-[11px] border-b border-hair/60 last:border-b-0"
+                    style={{ gridTemplateColumns: "1fr 80px 80px 80px 60px 36px" }}
+                  >
+                    <span className="text-ink truncate pr-2" title={r.address}>
+                      {r.address.split(",")[0]}
+                    </span>
+                    <span className="text-right font-mono text-muted">
+                      {r.reference_a_sqft.toLocaleString()}
+                    </span>
+                    <span className="text-right font-mono text-muted">
+                      {r.reference_b_sqft.toLocaleString()}
+                    </span>
+                    <span className="text-right font-mono font-semibold text-ink">
+                      {r.measured_sqft.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                    </span>
+                    <span className={`text-right font-mono text-[10px] font-semibold ${r.passed ? "text-green-600" : "text-red-500"}`}>
+                      {r.best_error_pct.toFixed(1)}%
+                    </span>
+                    <span className="flex justify-center">
+                      {r.passed ? (
+                        <span className="w-4 h-4 rounded-full bg-green-100 flex items-center justify-center">
+                          <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 5.2 L4 7.2 L8 3" fill="none" stroke="#16a34a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        </span>
+                      ) : (
+                        <span className="w-4 h-4 rounded-full bg-red-100 flex items-center justify-center">
+                          <svg width="10" height="10" viewBox="0 0 10 10"><path d="M3 3 L7 7 M7 3 L3 7" fill="none" stroke="#dc2626" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </main>

@@ -11,7 +11,7 @@ import type { RoofSegment } from "../types/solar";
 import RoofBlueprint, { type BlueprintSegment } from "../components/RoofBlueprint";
 import ModelViewer from "../components/ModelViewer";
 import { useMaterials } from "../hooks/useEstimates";
-import type { MaterialTab } from "../api/estimates";
+import type { MaterialTab, MaterialCard } from "../api/estimates";
 import { useAutoSync } from "../hooks/useAutoSync";
 
 type ViewMode = "satellite" | "topdown" | "3d";
@@ -125,6 +125,9 @@ export default function EstimatorPage() {
   const [editLayout, setEditLayout] = useState(false);
   const [panelPositions, setPanelPositions] = useState<Record<string, PanelPos>>(loadPositions);
   const [, setCredits] = useState("");
+  const [focusedSegmentIndex, setFocusedSegmentIndex] = useState<number | null>(null);
+
+  const focusedSegment = focusedSegmentIndex != null ? segments[focusedSegmentIndex] ?? null : null;
 
   const panelDragRef = useRef<{ active: boolean; panelId: string; offsetX: number; offsetY: number }>({ active: false, panelId: "", offsetX: 0, offsetY: 0 });
 
@@ -251,10 +254,28 @@ export default function EstimatorPage() {
             <div className="w-full h-px bg-hair mb-3" />
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-mono font-bold text-ink/70 tracking-wider uppercase">
-                {selectedSegments.length > 0 ? `${selectedSegments.length} SEGMENT${selectedSegments.length > 1 ? "S" : ""} SELECTED` : "NO SEGMENT SELECTED"}
+                {focusedSegment ? `SEGMENT ${focusedSegmentIndex! + 1}` : selectedSegments.length > 0 ? `${selectedSegments.length} SEGMENT${selectedSegments.length > 1 ? "S" : ""} SELECTED` : "NO SEGMENT SELECTED"}
               </span>
+              {selectedSegments.length > 0 && (
+                <span className="text-[10px] font-mono text-ink/50">{selectedSegments.length} selected</span>
+              )}
             </div>
-            {selectedSegments.length > 0 ? (
+            {focusedSegment ? (
+              <div className="space-y-1.5">
+                {[
+                  { k: "Area", v: `${Math.round(focusedSegment.area_sq_ft).toLocaleString()} sf` },
+                  { k: "Ground area", v: `${Math.round(focusedSegment.ground_area_sq_ft).toLocaleString()} sf` },
+                  { k: "Pitch", v: focusedSegment.pitch_degrees != null ? `${focusedSegment.pitch_degrees.toFixed(1)}°` : "—" },
+                  { k: "Azimuth", v: focusedSegment.azimuth_degrees != null ? `${focusedSegment.azimuth_degrees.toFixed(0)}° ${azimuthToCompass(focusedSegment.azimuth_degrees)}` : "—" },
+                  { k: "Height at center", v: focusedSegment.plane_height_meters != null ? `${(focusedSegment.plane_height_meters * 3.28084).toFixed(1)} ft` : "—" },
+                ].map((row) => (
+                  <div key={row.k} className="flex items-center justify-between py-0.5">
+                    <span className="text-[12px] text-ink/60 font-mono font-semibold">{row.k}</span>
+                    <span className="text-[12px] font-mono font-bold text-ink">{row.v}</span>
+                  </div>
+                ))}
+              </div>
+            ) : selectedSegments.length > 0 ? (
               <div className="space-y-1.5">
                 {[
                   { k: "Combined area", v: `${Math.round(selectedSegments.reduce((s, seg) => s + seg.area_sq_ft, 0)).toLocaleString()} sf` },
@@ -288,6 +309,50 @@ export default function EstimatorPage() {
             ) : (
               <p className="text-[12px] text-ink/50 font-semibold">Click roof segments to select them.</p>
             )}
+
+            {/* Estimate */}
+            {(() => {
+              const selectedArea = selectedSegments.reduce((s, seg) => s + seg.area_sq_ft, 0);
+              let selectedMaterial: MaterialCard | undefined;
+              if (selectedMaterialId && materialsMap) {
+                for (const cards of Object.values(materialsMap)) {
+                  const found = cards.find((c) => c.id === selectedMaterialId);
+                  if (found) { selectedMaterial = found; break; }
+                }
+              }
+              if (selectedSegments.length === 0 || !selectedMaterial) return null;
+              const totalEstimate = selectedArea * selectedMaterial.pricePerSf;
+              const avgPitch = selectedSegments.filter((s) => s.pitch_degrees != null).reduce((sum, s, _, arr) => sum + s.pitch_degrees! / arr.length, 0);
+              return (
+                <>
+                  <div className="w-full h-px bg-hair my-3" />
+                  <span className="text-[11px] font-mono font-bold text-ink/70 tracking-wider uppercase mb-2 block">Estimate</span>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between py-0.5">
+                      <span className="text-[12px] text-ink/60 font-mono font-semibold">Roof area</span>
+                      <span className="text-[12px] font-mono font-bold text-ink">{Math.round(selectedArea).toLocaleString()} sf</span>
+                    </div>
+                    <div className="flex items-center justify-between py-0.5">
+                      <span className="text-[12px] text-ink/60 font-mono font-semibold">Avg pitch</span>
+                      <span className="text-[12px] font-mono font-bold text-ink">{avgPitch.toFixed(1)}°</span>
+                    </div>
+                    <div className="flex items-center justify-between py-0.5">
+                      <span className="text-[12px] text-ink/60 font-mono font-semibold">Material</span>
+                      <span className="text-[12px] font-mono font-bold text-ink">{selectedMaterial.name} · {selectedMaterial.sub}</span>
+                    </div>
+                    <div className="flex items-center justify-between py-0.5">
+                      <span className="text-[12px] text-ink/60 font-mono font-semibold">Rate</span>
+                      <span className="text-[12px] font-mono font-bold text-ink">{selectedMaterial.price}/sf</span>
+                    </div>
+                    <div className="w-full h-px bg-hair my-1" />
+                    <div className="flex items-center justify-between py-1">
+                      <span className="text-[13px] font-mono font-bold text-ink">Total</span>
+                      <span className="text-[17px] font-mono font-bold text-blue">${totalEstimate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </>
         ) : (
           <p className="text-[12px] text-ink/50 font-semibold">No building data available.</p>
@@ -323,16 +388,18 @@ export default function EstimatorPage() {
             {segments.map((seg, i) => {
               const isSel = selectedSegmentIndices.includes(i);
               return (
-                <button key={i} onClick={() => toggleSegmentIndex(i)}
-                  className={`w-full flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer transition-colors border-none text-left font-sans ${isSel ? "bg-blue-100" : "bg-transparent hover:bg-hair/40"}`}>
-                  <div className={`w-3.5 h-3.5 rounded-sm border-2 flex items-center justify-center ${isSel ? "border-blue bg-blue" : "border-hair"}`}>
+                <div key={i} onClick={() => setFocusedSegmentIndex(focusedSegmentIndex === i ? null : i)}
+                  className={`w-full flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer transition-colors text-left font-sans ${isSel ? "bg-blue-100" : "bg-transparent hover:bg-hair/40"}`}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleSegmentIndex(i); }}
+                    className={`w-3.5 h-3.5 rounded-sm border-2 flex items-center justify-center shrink-0 cursor-pointer bg-transparent p-0 ${isSel ? "border-blue bg-blue" : "border-hair"}`}>
                     {isSel && <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4L3 5.5L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-                  </div>
+                  </button>
                   <span className="flex-1 text-[12px] font-medium">
                     Segment {i + 1}<span className="text-[10px] text-muted ml-1.5">{seg.azimuth_degrees != null ? `${azimuthToCompass(seg.azimuth_degrees)}-facing` : ""}</span>
                   </span>
                   <span className="text-[11px] font-mono text-muted">{Math.round(seg.area_sq_ft).toLocaleString()} sf</span>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -342,7 +409,7 @@ export default function EstimatorPage() {
       </GlassPanel>
 
       {/* Material picker */}
-      <GlassPanel id="materials" editLayout={editLayout} positions={panelPositions} onDragStart={handlePanelDragStart} className="bg-white/88 text-ink p-4" style={{ bottom: 70, right: 20, width: 290, zIndex: 30 }}>
+      <GlassPanel id="materials" editLayout={editLayout} positions={panelPositions} onDragStart={handlePanelDragStart} className="bg-white/88 text-ink p-4" style={{ bottom: 100, right: 20, width: 290, zIndex: 30 }}>
         <div className="text-[9.5px] font-mono text-muted tracking-wider uppercase mb-2.5">Quick materials</div>
         <div className="flex gap-1 mb-3">
           {(["shingle", "metal", "membrane"] as const).map((tab) => (

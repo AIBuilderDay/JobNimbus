@@ -10,6 +10,7 @@ import GlassNav, {
 import StepCrumbs from "../components/ui/StepCrumbs";
 import { useEstimatorStore } from "../store/estimatorStore";
 import { useAutoSync } from "../hooks/useAutoSync";
+import { usePricing } from "../hooks/usePricing";
 
 
 /* ------------------------------------------------------------------ */
@@ -115,15 +116,26 @@ function NextStep({
 /*  FinalizationPage                                                   */
 /* ================================================================== */
 
+function fmtUSD(cents: number): string {
+  return (cents / 100).toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+  });
+}
+
 export default function FinalizationPage() {
   const navigate = useNavigate();
-  const { address } = useEstimatorStore();
+  const { address, estimateId, proposalState, pricingState } = useEstimatorStore();
   const { isSyncing, lastSyncedAt } = useAutoSync();
+  const { data: pricing } = usePricing(estimateId);
+  const totalDisplay = pricing ? fmtUSD(pricing.customer_total_cents) : "$25,582";
+  const recipientEmail = proposalState.recipient || "maria.delgado@gmail.com";
+  const marginDisplay = pricing ? `${pricing.margin_pct}%` : `${pricingState.marginPct}%`;
 
   const timelineEvents: TimelineEvent[] = [
     {
       title: "Email delivered",
-      sub: "maria.delgado@gmail.com",
+      sub: recipientEmail,
       time: "09:21 AM · just now",
       variant: "pulse",
     },
@@ -135,7 +147,7 @@ export default function FinalizationPage() {
     },
     {
       title: "Pricing locked",
-      sub: "$25,582 · 38% margin · 30-day hold",
+      sub: `${totalDisplay} · ${marginDisplay} margin · 30-day hold`,
       time: "09:20 AM",
       variant: "check",
     },
@@ -158,7 +170,7 @@ export default function FinalizationPage() {
         <NavDivider />
         <NavMeta label="PROPERTY" value={address ?? "No address selected"} />
         <NavDivider />
-        <StepCrumbs current={4} completed />
+        <StepCrumbs current={5} completed />
         <NavDivider />
         <SavedIndicator isSyncing={isSyncing} lastSyncedAt={lastSyncedAt} />
         <NavDivider />
@@ -213,7 +225,7 @@ export default function FinalizationPage() {
                   SENT TO
                 </div>
                 <div className="text-[13px] font-semibold text-ink mt-1 break-all">
-                  maria.delgado@gmail.com
+                  {recipientEmail}
                 </div>
               </div>
               <div>
@@ -221,9 +233,8 @@ export default function FinalizationPage() {
                   CUSTOMER TOTAL
                 </div>
                 <div className="text-[13px] font-semibold text-ink mt-1">
-                  $25,582
+                  {totalDisplay}
                 </div>
-                <div className="text-[11px] text-muted">$336/mo</div>
               </div>
               <div>
                 <div className="text-[10px] font-mono text-muted uppercase tracking-wider">

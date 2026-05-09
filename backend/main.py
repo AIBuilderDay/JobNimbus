@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from dao.database import init_db, get_connection
 from logger import get_logger
-from routers import aerial, catalog, estimate, listings, places, model3d, roof_polygons
+from routers import aerial, catalog, estimate, listings, places, model3d, proposal, roof_polygons
 
 log = get_logger(__name__)
 
@@ -56,4 +56,5 @@ app.include_router(catalog.router)
 app.include_router(places.router)
 app.include_router(aerial.router)
 app.include_router(model3d.router)
+app.include_router(proposal.router)
 app.include_router(roof_polygons.router)

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import DarkLayout from "../components/layout/DarkLayout";
 import BrandMark from "../components/ui/BrandMark";
@@ -10,6 +11,8 @@ import GlassNav, {
 import StepCrumbs from "../components/ui/StepCrumbs";
 import { useEstimatorStore } from "../store/estimatorStore";
 import { useAutoSync } from "../hooks/useAutoSync";
+import { usePricing } from "../hooks/usePricing";
+import { sendProposal } from "../api/proposal";
 
 
 /* ------------------------------------------------------------------ */
@@ -81,10 +84,19 @@ function ToneChip({
 /*  ProposalPage                                                       */
 /* ================================================================== */
 
+function fmtUSD(cents: number): string {
+  return (cents / 100).toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+  });
+}
+
 export default function ProposalPage() {
   const navigate = useNavigate();
-  const { address, proposalState, setProposalState } = useEstimatorStore();
+  const { address, estimateId, proposalState, setProposalState } = useEstimatorStore();
   const { isSyncing, lastSyncedAt, syncNow } = useAutoSync();
+  const { data: pricing } = usePricing(estimateId);
+  const totalDisplay = pricing ? fmtUSD(pricing.customer_total_cents) : "$25,582";
 
   const { coverNote, recipient, cc, tone, toggles, previewTab } = proposalState;
   const setCoverNote = (v: string) => setProposalState({ coverNote: v });
@@ -92,6 +104,9 @@ export default function ProposalPage() {
   const setCc = (v: string) => setProposalState({ cc: v });
   const setTone = (v: number) => setProposalState({ tone: v });
   const setPreviewTab = (v: number) => setProposalState({ previewTab: v });
+
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const toneLabels = ["Formal", "Conversational", "Direct", "Warm"];
   const previewTabs = [
@@ -110,9 +125,29 @@ export default function ProposalPage() {
   const toggleAt = (i: number) =>
     setProposalState({ toggles: toggles.map((v, j) => (j === i ? !v : v)) });
 
-  const handleSend = () => {
-    syncNow();
-    navigate("/finalization");
+  const handleSend = async () => {
+    setSending(true);
+    setSendError(null);
+    try {
+      await sendProposal({
+        recipient,
+        cc,
+        coverNote,
+        address: address ?? "",
+        total: totalDisplay,
+        tone: toneLabels[tone],
+        includeFinancing: toggles[0],
+        includeEsignature: toggles[1],
+        includeDronePhotos: toggles[2],
+        includeWarrantyPdf: toggles[3],
+      });
+      syncNow();
+      navigate("/finalization");
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Failed to send proposal");
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -126,11 +161,11 @@ export default function ProposalPage() {
         <NavDivider />
         <NavMeta label="PROPERTY" value={address ?? "No address selected"} />
         <NavDivider />
-        <StepCrumbs current={3} />
+        <StepCrumbs current={4} />
         <NavDivider />
         <SavedIndicator isSyncing={isSyncing} lastSyncedAt={lastSyncedAt} />
         <NavDivider />
-        <NavIconButton icon="send" tooltip="Send to homeowner" variant="primary" onClick={handleSend} />
+        <NavIconButton icon="send" tooltip="Send to homeowner" variant="primary" onClick={handleSend} disabled={sending} />
       </GlassNav>
 
       {/* Body */}
@@ -143,7 +178,7 @@ export default function ProposalPage() {
           {/* Eyebrow + title */}
           <div>
             <div className="text-[11px] font-mono text-white/55 uppercase tracking-wider">
-              PROPOSAL &middot; STEP 5 OF 5
+              PROPOSAL &middot; STEP 4 OF 5
             </div>
             <h1 className="font-serif text-[44px] leading-[1.06] font-normal tracking-[-1px] text-white mt-1.5">
               Compose &amp; send.
@@ -228,11 +263,17 @@ export default function ProposalPage() {
                 Maria will receive a branded email with an interactive proposal
                 link. The proposal locks pricing for 30 days.
               </div>
+              {sendError && (
+                <div className="text-[12px] text-red-600 bg-red-50 rounded-lg px-3 py-2">
+                  {sendError}
+                </div>
+              )}
               <button
                 onClick={handleSend}
-                className="w-full py-3 bg-blue text-white rounded-xl text-[14px] font-semibold cursor-pointer border-none hover:bg-blue-bright transition-colors"
+                disabled={sending}
+                className="w-full py-3 bg-blue text-white rounded-xl text-[14px] font-semibold cursor-pointer border-none hover:bg-blue-bright transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Send proposal &middot; $25,582
+                {sending ? "Sending…" : `Send proposal · ${totalDisplay}`}
               </button>
             </div>
           </div>
@@ -320,12 +361,19 @@ export default function ProposalPage() {
                 <span>DESCRIPTION</span>
                 <span className="text-right">AMOUNT</span>
               </div>
-              {[
-                { label: "Materials", value: "$14,248.10" },
-                { label: "Labor", value: "$3,870.00" },
-                { label: "Disposal & permits", value: "$420.00" },
-                { label: "Margin (38%)", value: "$7,044.00" },
-              ].map((r) => (
+              {(pricing
+                ? [
+                    { label: "Subtotal", value: fmtUSD(pricing.subtotal_cents) },
+                    { label: `Margin (${pricing.margin_pct}%)`, value: fmtUSD(pricing.margin_addon_cents) },
+                    { label: `Sales tax (${pricing.sales_tax_pct}%)`, value: fmtUSD(pricing.sales_tax_cents) },
+                  ]
+                : [
+                    { label: "Materials", value: "$14,248.10" },
+                    { label: "Labor", value: "$3,870.00" },
+                    { label: "Disposal & permits", value: "$420.00" },
+                    { label: "Margin (38%)", value: "$7,044.00" },
+                  ]
+              ).map((r) => (
                 <div
                   key={r.label}
                   className="grid grid-cols-2 px-3 py-1.5 text-[10.5px] border-b border-hair/60 last:border-b-0"
@@ -344,7 +392,7 @@ export default function ProposalPage() {
                 Total due
               </span>
               <span className="text-[20px] font-mono font-bold text-ink">
-                $25,582
+                {totalDisplay}
               </span>
             </div>
 
