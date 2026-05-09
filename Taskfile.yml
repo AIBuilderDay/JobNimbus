@@ -25,7 +25,7 @@ tasks:
           ❌ backend/.env missing
           Run: task env:generate
     cmds:
-      - op run --env-file=backend/.env -- docker compose up --build
+      - op run --env-file=backend/.env -- docker compose up --build || test $? -eq 130
 
   up:detached:
     desc: Same as `task up` but runs detached
@@ -46,13 +46,40 @@ tasks:
   logs:
     desc: Tail logs from backend + frontend (docker compose)
     cmds:
-      - docker compose logs -f
+      - docker compose logs -f || test $? -eq 130
+
+  clean:
+    desc: Nuke caches, node_modules, and docker state so `task up` rebuilds from scratch
+    cmds:
+      - docker compose down --remove-orphans 2>/dev/null || true
+      - find backend -type d \( -name __pycache__ -o -name .pytest_cache -o -name .ruff_cache -o -name .mypy_cache \) -prune -exec rm -rf {} +
+      - rm -rf frontend/node_modules frontend/dist frontend/.vite
+      - echo ""
+      - echo "Cleaned backend caches, frontend node_modules, and docker containers."
+      - echo "Now run 'task up' — docker compose will do a fresh build with current deps."
+
+  clean:all:
+    desc: NUKE EVERYTHING — caches, node_modules, .venv, .env files, SQLite DB, docker volumes + images. You will need to re-run `task env:generate`.
+    prompt: This wipes .env files and the local SQLite cache (including any precached EagleView reports — ~20 min to rebuild). Continue?
+    cmds:
+      - docker compose down -v --remove-orphans 2>/dev/null || true
+      - docker image rm jobnimbus-backend 2>/dev/null || true
+      - find backend -type d \( -name __pycache__ -o -name .pytest_cache -o -name .ruff_cache -o -name .mypy_cache \) -prune -exec rm -rf {} +
+      - rm -rf backend/.venv
+      - rm -f backend/jobnimbus.db backend/jobnimbus.db-shm backend/jobnimbus.db-wal
+      - rm -f backend/.env frontend/.env.local frontend/.env.prod
+      - rm -rf frontend/node_modules frontend/dist frontend/.vite
+      - echo ""
+      - echo "Nuked everything. To rebuild from zero:"
+      - echo "  1. task env:generate         — regenerate .env files from 1Password"
+      - echo "  2. task up                   — docker compose fresh build"
+      - echo "  3. task backend:precache     — optional, re-warm EagleView cache (~20 min)"
 
   backend:dev:
     desc: Build, start, and tail logs for backend container
     deps: [backend:up]
     cmds:
-      - docker logs -f jobnimbus-backend
+      - docker logs -f jobnimbus-backend || test $? -eq 130
 
   backend:test:
     desc: Run backend tests
@@ -95,7 +122,7 @@ tasks:
   backend:logs:
     desc: Tail logs from running backend container
     cmds:
-      - docker logs -f jobnimbus-backend
+      - docker logs -f jobnimbus-backend || test $? -eq 130
 
   backend:shell:
     desc: Exec into running backend container
