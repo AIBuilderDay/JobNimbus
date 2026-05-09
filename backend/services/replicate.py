@@ -3,7 +3,10 @@ import base64
 
 import httpx
 
-from config import get_replicate_api_token
+from logger import get_logger
+from settings import settings
+
+log = get_logger(__name__)
 
 REPLICATE_API_BASE = "https://api.replicate.com/v1"
 MODEL = "tencent/hunyuan-3d-3.1"
@@ -16,7 +19,7 @@ def _image_to_data_uri(img_bytes: bytes) -> str:
 
 async def create_prediction(images: list[bytes]) -> str:
     """Submit a Hunyuan3D prediction. Returns prediction ID."""
-    token = get_replicate_api_token()
+    log.info("replicate create_prediction images=%d", len(images))
 
     input_data: dict = {
         "image": _image_to_data_uri(images[0]),
@@ -30,7 +33,7 @@ async def create_prediction(images: list[bytes]) -> str:
 
     url = f"{REPLICATE_API_BASE}/models/{MODEL}/predictions"
     headers = {
-        "Authorization": f"Bearer {token}",
+        "Authorization": f"Bearer {settings.REPLICATE_API_TOKEN}",
         "Content-Type": "application/json",
     }
 
@@ -38,7 +41,9 @@ async def create_prediction(images: list[bytes]) -> str:
         resp = await client.post(url, json={"input": input_data}, headers=headers)
 
     resp.raise_for_status()
-    return resp.json()["id"]
+    prediction_id = resp.json()["id"]
+    log.info("replicate prediction submitted id=%s", prediction_id)
+    return prediction_id
 
 
 async def poll_prediction(
@@ -47,9 +52,8 @@ async def poll_prediction(
     interval: float = 3.0,
 ) -> dict:
     """Poll prediction until complete. Returns full prediction response."""
-    token = get_replicate_api_token()
     url = f"{REPLICATE_API_BASE}/predictions/{prediction_id}"
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {settings.REPLICATE_API_TOKEN}"}
 
     elapsed = 0.0
     async with httpx.AsyncClient(timeout=10.0) as client:
@@ -60,22 +64,27 @@ async def poll_prediction(
 
             status = data.get("status")
             if status == "succeeded":
+                log.info("replicate prediction succeeded id=%s elapsed=%.1fs", prediction_id, elapsed)
                 return data
             if status in ("failed", "canceled"):
                 error = data.get("error", "Unknown error")
+                log.error("replicate prediction %s id=%s error=%s", status, prediction_id, error)
                 raise RuntimeError(f"Prediction {status}: {error}")
 
             await asyncio.sleep(interval)
             elapsed += interval
 
+    log.error("replicate prediction timed out id=%s timeout=%.1fs", prediction_id, timeout)
     raise TimeoutError(f"Prediction {prediction_id} timed out after {timeout}s")
 
 
 async def download_model(model_url: str) -> bytes:
     """Download generated GLB from Replicate output URL."""
+    log.info("replicate download_model url=%s", model_url)
     async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.get(model_url)
     resp.raise_for_status()
+    log.info("replicate download_model bytes=%d", len(resp.content))
     return resp.content
 
 

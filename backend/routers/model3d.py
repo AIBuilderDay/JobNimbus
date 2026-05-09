@@ -1,15 +1,17 @@
 import base64
-import os
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from logger import get_logger
 from services.google.street_view import get_building_images
 from services.image_cleanup import clean_images
 from services.replicate import generate_3d_model
+from settings import settings
 
+log = get_logger(__name__)
 router = APIRouter(prefix="/api/model3d")
 
 _models: dict[str, dict[str, Any]] = {}
@@ -78,7 +80,8 @@ class GenerateRequest(BaseModel):
 
 @router.post("/generate")
 async def generate(req: GenerateRequest, background_tasks: BackgroundTasks) -> ModelStatus:
-    if not os.environ.get("GOOGLE_MAPS_API_KEY"):
+    log.info("POST /api/model3d/generate estimate_id=%s lat=%s lng=%s", req.estimate_id, req.lat, req.lng)
+    if not settings.GOOGLE_MAPS_API_KEY:
         raise HTTPException(status_code=503, detail="Google Maps API key is not configured.")
 
     _models[req.estimate_id] = {"status": "pending", "glb": None, "error": None}
@@ -88,7 +91,8 @@ async def generate(req: GenerateRequest, background_tasks: BackgroundTasks) -> M
 
 @router.post("/capture")
 async def capture_images(req: CaptureRequest) -> CaptureResponse:
-    if not os.environ.get("GOOGLE_MAPS_API_KEY"):
+    log.info("POST /api/model3d/capture estimate_id=%s lat=%s lng=%s", req.estimate_id, req.lat, req.lng)
+    if not settings.GOOGLE_MAPS_API_KEY:
         raise HTTPException(
             status_code=503,
             detail="Google Maps API key is not configured.",

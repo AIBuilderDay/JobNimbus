@@ -3,7 +3,10 @@ import asyncio
 import httpx
 from urllib.parse import urlencode
 
-from config import get_google_maps_api_key
+from logger import get_logger
+from settings import settings
+
+log = get_logger(__name__)
 
 STREET_VIEW_BASE = "https://maps.googleapis.com/maps/api/streetview"
 METADATA_BASE = f"{STREET_VIEW_BASE}/metadata"
@@ -19,7 +22,7 @@ async def check_coverage(lat: float, lng: float, radius: int = 50) -> dict | Non
     params = urlencode({
         "location": f"{lat},{lng}",
         "radius": radius,
-        "key": get_google_maps_api_key(),
+        "key": settings.GOOGLE_MAPS_API_KEY,
     })
     url = f"{METADATA_BASE}?{params}"
 
@@ -49,7 +52,7 @@ async def _fetch_image(
         "pitch": pitch,
         "fov": fov,
         "size": size,
-        "key": get_google_maps_api_key(),
+        "key": settings.GOOGLE_MAPS_API_KEY,
     })
     resp = await client.get(f"{STREET_VIEW_BASE}?{params}")
     resp.raise_for_status()

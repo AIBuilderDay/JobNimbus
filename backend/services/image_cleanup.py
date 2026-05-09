@@ -1,12 +1,12 @@
 import asyncio
 import base64
-import logging
 
 import httpx
 
-from config import get_replicate_api_token
+from logger import get_logger
+from settings import settings
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 REPLICATE_API_BASE = "https://api.replicate.com/v1"
 CLEANUP_MODEL = "black-forest-labs/flux-kontext-dev"
@@ -26,9 +26,9 @@ def _image_to_data_uri(img_bytes: bytes) -> str:
 
 
 async def clean_image(image_bytes: bytes) -> bytes:
-    token = get_replicate_api_token()
+    log.info("replicate clean_image bytes=%d", len(image_bytes))
     headers = {
-        "Authorization": f"Bearer {token}",
+        "Authorization": f"Bearer {settings.REPLICATE_API_TOKEN}",
         "Content-Type": "application/json",
     }
 
@@ -52,7 +52,10 @@ async def clean_image(image_bytes: bytes) -> bytes:
     elapsed = 0.0
     async with httpx.AsyncClient(timeout=10.0) as client:
         while elapsed < 120.0:
-            resp = await client.get(poll_url, headers={"Authorization": f"Bearer {token}"})
+            resp = await client.get(
+                poll_url,
+                headers={"Authorization": f"Bearer {settings.REPLICATE_API_TOKEN}"},
+            )
             resp.raise_for_status()
             data = resp.json()
 
@@ -87,8 +90,8 @@ async def clean_images(images: list[bytes]) -> list[bytes]:
             try:
                 cleaned = await clean_image(img)
                 return idx, cleaned
-            except Exception as e:
-                logger.warning("Image cleanup failed for index %d: %s", idx, e)
+            except Exception:
+                log.exception("Image cleanup failed for index %d", idx)
                 return idx, img
 
     tasks = [_clean_one(i, img) for i, img in enumerate(street_images)]
