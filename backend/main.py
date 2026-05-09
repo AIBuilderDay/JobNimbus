@@ -9,7 +9,21 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from dao.database import init_db, get_connection
 from logger import get_logger
-from routers import aerial, catalog, estimate, listings, places, model3d, roof_polygons
+from routers import (
+    aerial,
+    benchmark,
+    blueprint,
+    catalog,
+    estimate,
+    finalize,
+    listings,
+    measurement,
+    model3d,
+    places,
+    pricing,
+    proposal,
+    roof_polygons,
+)
 
 log = get_logger(__name__)
 
@@ -35,7 +49,20 @@ async def lifespan(app: FastAPI):
     log.info("backend shutting down")
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="JobNimbus AI Roofing API",
+    version="0.1.0",
+    description=(
+        "Endpoints for the AI roofing estimator. Group quick reference:\n\n"
+        "- **measurement** — generic Solar lookup for any address\n"
+        "- **benchmark** — live qualification proof against 5 reference properties\n"
+        "- **estimate** — start/get/refine an estimate session\n"
+        "- **pricing / proposal / finalize** — cost & document lifecycle\n"
+        "- **blueprint** — wireframe roof geometry\n"
+        "- **listings / catalog / places / aerial / roof-polygons / model3d** — supporting data"
+    ),
+    lifespan=lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -45,12 +72,21 @@ app.add_middleware(
 )
 
 
-@app.get("/api/health")
+@app.get("/api/health", tags=["health"])
 def health():
     return {"status": "ok", "message": "FastAPI backend running"}
 
 
+# Core flow
+app.include_router(measurement.router)
+app.include_router(benchmark.router)
 app.include_router(estimate.router)
+app.include_router(pricing.router)
+app.include_router(proposal.router)
+app.include_router(finalize.router)
+app.include_router(blueprint.router)
+
+# Supporting
 app.include_router(listings.router)
 app.include_router(catalog.router)
 app.include_router(places.router)

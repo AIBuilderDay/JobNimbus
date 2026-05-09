@@ -7,7 +7,7 @@ from services.google.data_layers import get_data_layers
 from services.roof_polygon_service import extract_roof_polygons
 
 log = get_logger(__name__)
-router = APIRouter(prefix="/api/roof-polygons")
+router = APIRouter(prefix="/api/roof-polygons", tags=["roof-polygons"])
 
 
 @router.get("")

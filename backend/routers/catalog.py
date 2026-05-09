@@ -4,7 +4,7 @@ from dao import catalog_dao
 from logger import get_logger
 
 log = get_logger(__name__)
-router = APIRouter(prefix="/api/catalog")
+router = APIRouter(prefix="/api/catalog", tags=["catalog"])
 
 
 @router.get("")

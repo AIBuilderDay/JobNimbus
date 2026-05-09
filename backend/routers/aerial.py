@@ -6,7 +6,7 @@ from logger import get_logger
 from services.google.aerial import ensure_video
 
 log = get_logger(__name__)
-router = APIRouter()
+router = APIRouter(tags=["aerial"])
 
 
 @router.get("/api/aerial")
