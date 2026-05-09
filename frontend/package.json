@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port 5174",
+    "dev": "vite --port 5173",
     "env:local": "../scripts/populate-env.sh local",
     "env:prod": "../scripts/populate-env.sh prod",
     "build": "tsc && vite build",
