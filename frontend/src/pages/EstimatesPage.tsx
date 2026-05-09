@@ -5,8 +5,6 @@ import BrandMark from "../components/ui/BrandMark";
 import GlassNav, {
   NavDivider,
   NavMeta,
-  SavedIndicator,
-  NavGhostButton,
   NavPrimaryButton,
 } from "../components/ui/GlassNav";
 import StatusPill from "../components/ui/StatusPill";
@@ -160,7 +158,7 @@ function EstimateRow({
 
   return (
     <div
-      className={`grid items-center gap-3.5 px-3.5 py-[14px] hover:bg-paper-2 transition-colors cursor-pointer ${
+      className={`grid items-center gap-3.5 px-3.5 py-[14px] hover:bg-blue-100 transition-colors cursor-pointer ${
         isLast ? "" : "border-b border-hair/40"
       }`}
       style={{
@@ -418,9 +416,6 @@ export default function EstimatesPage() {
         <NavDivider />
         <NavMeta label="VIEWING" value="All estimates · last 90 days" />
         <NavDivider />
-        <SavedIndicator />
-        <NavDivider />
-        <NavGhostButton>Filters · 0</NavGhostButton>
         <NavPrimaryButton onClick={() => navigate("/address")}>
           + New estimate
         </NavPrimaryButton>

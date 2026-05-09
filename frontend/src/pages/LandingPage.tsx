@@ -178,9 +178,8 @@ export default function LandingPage() {
       {/* ---- NAV ---- */}
       <div className="pt-4">
         <GlassNav variant="light" minWidth={1180}>
-          <Link to="/" className="flex items-center gap-2.5 no-underline">
+          <Link to="/" className="flex items-center no-underline">
             <BrandMark size={30} />
-            <span className="text-[15px] font-semibold tracking-[-0.3px] text-ink">Crew</span>
           </Link>
 
           <div className="flex items-center gap-1 ml-4">

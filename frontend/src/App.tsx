@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { lazy, Suspense } from "react";
+import { Toaster } from "sonner";
 
 const LandingPage = lazy(() => import("./pages/LandingPage"));
 const AddressPage = lazy(() => import("./pages/AddressPage"));
@@ -20,6 +21,7 @@ function Loading() {
 export default function App() {
   return (
     <BrowserRouter>
+      <Toaster position="top-right" richColors theme="dark" />
       <Suspense fallback={<Loading />}>
         <Routes>
           <Route path="/" element={<LandingPage />} />

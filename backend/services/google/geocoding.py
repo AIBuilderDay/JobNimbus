@@ -4,7 +4,6 @@ from urllib.parse import urlencode
 from config import get_google_maps_api_key
 
 GEOCODING_API_BASE = "https://maps.googleapis.com/maps/api/geocode/json"
-FRONTEND_REFERER = "http://localhost:5173"
 
 
 async def geocode(address: str) -> dict | None:
@@ -16,7 +15,7 @@ async def geocode(address: str) -> dict | None:
     url = f"{GEOCODING_API_BASE}?{params}"
 
     async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(url, headers={"Referer": FRONTEND_REFERER})
+        resp = await client.get(url)
 
     resp.raise_for_status()
     data = resp.json()

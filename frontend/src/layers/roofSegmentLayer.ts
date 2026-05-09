@@ -1,11 +1,12 @@
 import { PolygonLayer } from "@deck.gl/layers";
-import type { RoofSegmentStat } from "../types/solar";
+import type { RoofSegment } from "../types/solar";
 
 function segmentToPolygon(
-  segment: RoofSegmentStat,
-): [number, number, number][] {
-  const { sw, ne } = segment.boundingBox;
-  const alt = segment.planeHeightAtCenterMeters;
+  segment: RoofSegment,
+): [number, number, number][] | null {
+  if (!segment.bounding_box) return null;
+  const { sw, ne } = segment.bounding_box;
+  const alt = segment.plane_height_meters ?? 0;
   return [
     [sw.longitude, sw.latitude, alt],
     [ne.longitude, sw.latitude, alt],
@@ -15,14 +16,13 @@ function segmentToPolygon(
 }
 
 function segmentColor(
-  segment: RoofSegmentStat,
+  segment: RoofSegment,
   isSelected: boolean,
 ): [number, number, number, number] {
   if (isSelected) return [56, 104, 198, 180];
 
-  const q = segment.stats.sunshineQuantiles;
-  const median = q[Math.floor(q.length / 2)] ?? 0;
-  const t = Math.min(1, Math.max(0, (median - 400) / 1400));
+  const area = segment.area_sq_ft;
+  const t = Math.min(1, Math.max(0, (area - 50) / 500));
 
   const r = Math.round(40 + t * 215);
   const g = Math.round(80 + t * 140);
@@ -31,16 +31,18 @@ function segmentColor(
 }
 
 export function createRoofSegmentLayer(
-  segments: RoofSegmentStat[],
+  segments: RoofSegment[],
   selectedIndex: number,
 ) {
-  return new PolygonLayer<RoofSegmentStat>({
+  const withPolygons = segments.filter((s) => s.bounding_box != null);
+
+  return new PolygonLayer<RoofSegment>({
     id: "roof-segments",
-    data: segments,
-    getPolygon: (d: RoofSegmentStat) => segmentToPolygon(d),
-    getFillColor: (d: RoofSegmentStat, { index }: { index: number }) =>
+    data: withPolygons,
+    getPolygon: (d: RoofSegment) => segmentToPolygon(d)!,
+    getFillColor: (d: RoofSegment, { index }: { index: number }) =>
       segmentColor(d, index === selectedIndex),
-    getLineColor: (_d: RoofSegmentStat, { index }: { index: number }) =>
+    getLineColor: (_d: RoofSegment, { index }: { index: number }) =>
       index === selectedIndex
         ? [56, 104, 198, 255]
         : [255, 255, 255, 120],

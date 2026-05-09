@@ -1,12 +1,14 @@
+import os
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
 from services.google.geocoding import geocode
 from services.google.solar import get_solar_data
 from services.google.static_maps import build_url
+from routers.model3d import _models as model_store, _run_full_pipeline
 
 router = APIRouter(prefix="/api/estimate")
 
@@ -29,7 +31,10 @@ class RefineRequest(BaseModel):
 
 
 @router.post("/start")
-async def start_estimate(req: StartEstimateRequest) -> dict[str, Any]:
+async def start_estimate(
+    req: StartEstimateRequest,
+    background_tasks: BackgroundTasks,
+) -> dict[str, Any]:
     estimate_id = str(uuid.uuid4())
 
     if req.lat is not None and req.lng is not None:
@@ -44,6 +49,17 @@ async def start_estimate(req: StartEstimateRequest) -> dict[str, Any]:
         resolved_address = coords["formatted_address"]
 
     solar = await get_solar_data(lat, lng)
+
+    # Kick off 3D model generation only if Google Maps API key is available
+    if os.environ.get("GOOGLE_MAPS_API_KEY"):
+        model_store[estimate_id] = {"status": "pending", "glb": None, "error": None}
+        background_tasks.add_task(_run_full_pipeline, estimate_id, lat, lng)
+    else:
+        model_store[estimate_id] = {
+            "status": "failed",
+            "glb": None,
+            "error": "Google Maps API key is not configured. 3D model generation unavailable.",
+        }
 
     payload: dict[str, Any] = {
         "estimate_id": estimate_id,

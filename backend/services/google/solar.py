@@ -5,7 +5,6 @@ from config import get_google_maps_api_key
 
 SOLAR_API_BASE = "https://solar.googleapis.com/v1"
 SQM_TO_SQFT = 10.7639
-FRONTEND_REFERER = "http://localhost:5173"
 
 
 async def get_solar_data(lat: float, lng: float) -> dict | None:
@@ -31,7 +30,7 @@ async def _fetch(lat: float, lng: float, quality: str) -> dict | None:
     url = f"{SOLAR_API_BASE}/buildingInsights:findClosest?{params}"
 
     async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(url, headers={"Referer": FRONTEND_REFERER})
+        resp = await client.get(url)
 
     if resp.status_code == 404:
         return None

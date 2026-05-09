@@ -14,7 +14,7 @@ export default function GlassNav({ children, variant = "dark", minWidth = 1240 }
   return (
     <div className="sticky top-4 z-50 flex justify-center px-6 pointer-events-none">
       <nav
-        className={`pointer-events-auto flex items-center gap-4.5 py-3 pl-5 pr-3.5 backdrop-blur-2xl rounded-[18px] ${base}`}
+        className={`pointer-events-auto flex flex-row items-center justify-between gap-4.5 py-3 pl-5 pr-3.5 backdrop-blur-2xl rounded-[18px] ${base}`}
         style={{ minWidth }}
       >
         {children}

@@ -2,10 +2,10 @@ version: "3"
 
 tasks:
   backend:dev:
-    desc: Run backend dev server locally with secrets injected from 1Password
-    dir: backend
+    desc: Build, start, and tail logs for backend container
+    deps: [backend:up]
     cmds:
-      - op run --env-file=.env -- uv run fastapi dev main.py
+      - docker logs -f jobnimbus-backend
 
   frontend:dev:
     desc: Run frontend Vite dev server with secrets injected from 1Password
@@ -20,10 +20,13 @@ tasks:
       - docker build -t jobnimbus-backend .
 
   backend:up:
-    desc: Start backend container
-    deps: [backend:build]
+    desc: Build and start backend container with env vars from .env
+    dir: backend
     cmds:
-      - docker run --rm -p 8000:8000 --name jobnimbus-backend jobnimbus-backend
+      - docker stop jobnimbus-backend 2>/dev/null || true
+      - docker rm jobnimbus-backend 2>/dev/null || true
+      - docker build --no-cache -t jobnimbus-backend .
+      - docker run -d -p 8000:8000 --env-file .env --name jobnimbus-backend jobnimbus-backend
 
   backend:down:
     desc: Stop backend container
