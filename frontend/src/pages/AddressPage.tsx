@@ -4,6 +4,7 @@ import DarkLayout from "../components/layout/DarkLayout";
 import GlassNav from "../components/ui/GlassNav";
 import BrandMark from "../components/ui/BrandMark";
 import { useProperties } from "../hooks/useEstimates";
+import { startEstimate } from "../api/estimates";
 import type { Property } from "../types/estimate";
 
 /* ------------------------------------------------------------------ */
@@ -210,9 +211,18 @@ export default function AddressPage() {
   }, [activeIndex]);
 
   const selectProperty = useCallback(
-    (_property: Property) => {
+    async (property: Property) => {
       setIsOpen(false);
       setLoading(true);
+
+      const addressString = `${property.line1}, ${property.line2}`;
+      try {
+        const result = await startEstimate(addressString);
+        console.log("Backend estimate result:", result);
+        sessionStorage.setItem("latest-estimate", JSON.stringify(result));
+      } catch (e) {
+        console.error("Failed to call backend:", e);
+      }
     },
     [],
   );

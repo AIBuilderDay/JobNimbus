@@ -7,6 +7,12 @@ tasks:
     cmds:
       - op run --env-file=.env -- uv run fastapi dev main.py
 
+  frontend:dev:
+    desc: Run frontend Vite dev server
+    dir: frontend
+    cmds:
+      - pnpm dev
+
   backend:build:
     desc: Build backend Docker image
     dir: backend

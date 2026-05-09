@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect, type ReactNode, type CSSPrope
 import { useNavigate } from "react-router-dom";
 import HouseModel, { ROOF_FACES, ROOF_META } from "../models/HouseModel";
 import BrandMark from "../components/ui/BrandMark";
+import type { BackendEstimate } from "../api/estimates";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -163,6 +164,17 @@ export default function EstimatorPage() {
   const [materialTab, setMaterialTab] = useState<MaterialTab>("shingle");
   const [editLayout, setEditLayout] = useState(false);
   const [panelPositions, setPanelPositions] = useState<Record<string, PanelPos>>(loadPositions);
+  const [estimate, setEstimate] = useState<BackendEstimate | null>(null);
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem("latest-estimate");
+    if (!stored) return;
+    try {
+      setEstimate(JSON.parse(stored));
+    } catch {
+      /* ignore malformed cache */
+    }
+  }, []);
 
   /* -- Drag rotation state -- */
   const dragRef = useRef<{ dragging: boolean; startX: number; startRot: number }>({
@@ -322,10 +334,12 @@ export default function EstimatorPage() {
           <BrandMark size={30} />
           <div className="flex flex-col gap-px px-1">
             <span className="text-[13px] font-semibold text-white tracking-tight">
-              Holloway re-roof
+              Re-roof estimate
             </span>
             <span className="text-[9.5px] font-mono text-white/45 tracking-wider">
-              EST-2418 · Draft
+              {estimate?.estimate_id
+                ? `EST-${estimate.estimate_id.slice(0, 8).toUpperCase()} · Draft`
+                : "EST-2418 · Draft"}
             </span>
           </div>
 
@@ -337,8 +351,8 @@ export default function EstimatorPage() {
             <span className="text-[9.5px] font-mono text-white/45 tracking-wider uppercase">
               PROPERTY
             </span>
-            <span className="text-xs font-semibold text-white font-mono">
-              412 W Holloway Ave · Tampa, FL
+            <span className="text-xs font-semibold text-white font-mono truncate max-w-[280px]">
+              {estimate?.address ?? "412 W Holloway Ave · Tampa, FL"}
             </span>
           </div>
 
@@ -417,9 +431,20 @@ export default function EstimatorPage() {
           </span>
           <span className="w-1.5 h-1.5 rounded-full bg-green shadow-[0_0_0_3px_rgba(58,166,118,0.2)]" />
         </div>
-        <div className="text-[13px] font-semibold mb-0.5">412 W Holloway Ave</div>
+        <div className="text-[13px] font-semibold mb-2 break-words leading-tight">
+          {estimate?.address ?? "412 W Holloway Ave"}
+        </div>
+        {estimate?.satellite_image_url && (
+          <img
+            src={estimate.satellite_image_url}
+            alt="Satellite view of property"
+            className="w-full rounded-lg border border-hair mb-3"
+          />
+        )}
         <div className="text-[10.5px] font-mono text-muted mb-4">
-          Parcel 191724-A · Hillsborough County
+          {estimate?.solar?.total_roof_area_sq_ft != null
+            ? `${Math.round(estimate.solar.total_roof_area_sq_ft).toLocaleString()} sq ft · ${estimate.solar.segments?.length ?? 0} faces`
+            : "Parcel 191724-A · Hillsborough County"}
         </div>
 
         {/* Rotation controls */}
