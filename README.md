@@ -70,6 +70,8 @@ Business logic for these flows already exists in the frontend pages; backend han
 
 ## Stack + AI choices
 
+> **Full breakdown with architecture diagram:** **[TECH_STACK.md](TECH_STACK.md)**
+
 - **Backend** — FastAPI / Python 3.14 / Pydantic v2 / `uv` / `httpx`. Layered providers → services → DAOs → routers.
 - **Frontend** — React / Vite / Zustand / react-query / Zod / pnpm.
 - **DB** — SQLite (stdlib `sqlite3`); ephemeral on Render, only caches reproducible data.
