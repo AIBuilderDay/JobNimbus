@@ -125,12 +125,29 @@ function fmtUSD(cents: number): string {
 
 export default function FinalizationPage() {
   const navigate = useNavigate();
-  const { address, estimateId, proposalState, pricingState } = useEstimatorStore();
+  const { address, estimateId, proposalState, pricingState, lastProposalPdfBase64 } = useEstimatorStore();
   const { isSyncing, lastSyncedAt } = useAutoSync();
   const { data: pricing } = usePricing(estimateId);
   const totalDisplay = pricing ? fmtUSD(pricing.customer_total_cents) : "$25,582";
   const recipientEmail = proposalState.recipient || "maria.delgado@gmail.com";
   const marginDisplay = pricing ? `${pricing.margin_pct}%` : `${pricingState.marginPct}%`;
+
+  const handleDownloadPdf = () => {
+    if (!lastProposalPdfBase64) {
+      navigate("/proposal");
+      return;
+    }
+    const bytes = Uint8Array.from(atob(lastProposalPdfBase64), (c) => c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "proposal.pdf";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
 
   const timelineEvents: TimelineEvent[] = [
     {
@@ -251,8 +268,11 @@ export default function FinalizationPage() {
               <button className="py-2.5 px-5 bg-blue text-white rounded-xl text-[13px] font-semibold cursor-pointer border-none hover:bg-blue-bright transition-colors">
                 View as homeowner
               </button>
-              <button className="py-2.5 px-4 bg-transparent text-ink border border-hair rounded-xl text-[13px] font-semibold cursor-pointer hover:bg-blue-soft/40 transition-colors">
-                Download PDF
+              <button
+                onClick={handleDownloadPdf}
+                className="py-2.5 px-4 bg-transparent text-ink border border-hair rounded-xl text-[13px] font-semibold cursor-pointer hover:bg-blue-soft/40 transition-colors"
+              >
+                {lastProposalPdfBase64 ? "Download PDF" : "Re-send to download"}
               </button>
               <button className="py-2.5 px-4 bg-transparent text-ink border border-hair rounded-xl text-[13px] font-semibold cursor-pointer hover:bg-blue-soft/40 transition-colors">
                 Share with crew

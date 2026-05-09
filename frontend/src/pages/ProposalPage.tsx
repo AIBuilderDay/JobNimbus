@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import DarkLayout from "../components/layout/DarkLayout";
 import BrandMark from "../components/ui/BrandMark";
@@ -13,6 +13,7 @@ import { useEstimatorStore } from "../store/estimatorStore";
 import { useAutoSync } from "../hooks/useAutoSync";
 import { usePricing } from "../hooks/usePricing";
 import { sendProposal } from "../api/proposal";
+import { renderElementToPdfBase64 } from "../lib/pdfFromElement";
 
 
 /* ------------------------------------------------------------------ */
@@ -93,7 +94,7 @@ function fmtUSD(cents: number): string {
 
 export default function ProposalPage() {
   const navigate = useNavigate();
-  const { address, estimateId, proposalState, setProposalState } = useEstimatorStore();
+  const { address, estimateId, proposalState, setProposalState, setLastProposalPdfBase64 } = useEstimatorStore();
   const { isSyncing, lastSyncedAt, syncNow } = useAutoSync();
   const { data: pricing } = usePricing(estimateId);
   const totalDisplay = pricing ? fmtUSD(pricing.customer_total_cents) : "$25,582";
@@ -107,6 +108,7 @@ export default function ProposalPage() {
 
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   const toneLabels = ["Formal", "Conversational", "Direct", "Warm"];
   const previewTabs = [
@@ -129,6 +131,9 @@ export default function ProposalPage() {
     setSending(true);
     setSendError(null);
     try {
+      if (!previewRef.current) throw new Error("Preview not ready");
+      const pdfBase64 = await renderElementToPdfBase64(previewRef.current);
+      setLastProposalPdfBase64(pdfBase64);
       await sendProposal({
         recipient,
         cc,
@@ -140,6 +145,7 @@ export default function ProposalPage() {
         includeEsignature: toggles[1],
         includeDronePhotos: toggles[2],
         includeWarrantyPdf: toggles[3],
+        pdfBase64,
       });
       syncNow();
       navigate("/finalization");
@@ -316,6 +322,7 @@ export default function ProposalPage() {
 
           {/* PDF preview card */}
           <div
+            ref={previewRef}
             className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.15)] p-8 overflow-hidden"
             style={{ aspectRatio: "8.5 / 11" }}
           >

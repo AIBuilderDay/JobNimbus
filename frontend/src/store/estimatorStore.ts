@@ -45,6 +45,7 @@ interface EstimatorState {
 
   pricingState: PricingState;
   proposalState: ProposalState;
+  lastProposalPdfBase64: string | null;
   lastSyncedAt: number | null;
   isSyncing: boolean;
 
@@ -59,6 +60,7 @@ interface EstimatorState {
   setSegmentPolygons: (polygons: { segment_id: number; polygon: number[][] }[]) => void;
   setPricingState: (patch: Partial<PricingState>) => void;
   setProposalState: (patch: Partial<ProposalState>) => void;
+  setLastProposalPdfBase64: (base64: string | null) => void;
   setSyncStatus: (syncing: boolean, syncedAt?: number) => void;
   reset: () => void;
 }
@@ -75,6 +77,7 @@ export const useEstimatorStore = create<EstimatorState>()(
       selectedMaterialId: null,
       pricingState: DEFAULT_PRICING,
       proposalState: DEFAULT_PROPOSAL,
+      lastProposalPdfBase64: null,
       lastSyncedAt: null,
       isSyncing: false,
 
@@ -114,6 +117,7 @@ export const useEstimatorStore = create<EstimatorState>()(
         set((state) => ({ pricingState: { ...state.pricingState, ...patch } })),
       setProposalState: (patch) =>
         set((state) => ({ proposalState: { ...state.proposalState, ...patch } })),
+      setLastProposalPdfBase64: (base64) => set({ lastProposalPdfBase64: base64 }),
       setSyncStatus: (syncing, syncedAt) =>
         set({ isSyncing: syncing, ...(syncedAt != null ? { lastSyncedAt: syncedAt } : {}) }),
       reset: () =>
@@ -127,6 +131,7 @@ export const useEstimatorStore = create<EstimatorState>()(
           selectedMaterialId: null,
           pricingState: DEFAULT_PRICING,
           proposalState: DEFAULT_PROPOSAL,
+          lastProposalPdfBase64: null,
           lastSyncedAt: null,
           isSyncing: false,
         }),

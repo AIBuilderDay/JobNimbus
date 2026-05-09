@@ -9,6 +9,7 @@ interface SendProposalParams {
   includeEsignature: boolean;
   includeDronePhotos: boolean;
   includeWarrantyPdf: boolean;
+  pdfBase64: string;
 }
 
 interface SendProposalResult {
@@ -33,6 +34,7 @@ export async function sendProposal(
       include_esignature: params.includeEsignature,
       include_drone_photos: params.includeDronePhotos,
       include_warranty_pdf: params.includeWarrantyPdf,
+      pdf_base64: params.pdfBase64,
     }),
   });
 

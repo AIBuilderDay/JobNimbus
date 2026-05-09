@@ -28,7 +28,6 @@ export default memo(function Scene({
   buildingInsights,
   selectedIndices,
   onToggleSegment,
-  onClearSegments,
   onCreditsUpdate,
   topDown = false,
 }: Props) {
