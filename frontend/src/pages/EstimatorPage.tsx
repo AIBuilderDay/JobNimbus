@@ -2,9 +2,10 @@ import { useState, useCallback, useRef, useEffect, type ReactNode, type CSSPrope
 import { useNavigate } from "react-router-dom";
 import Scene from "../components/Scene";
 import BrandMark from "../components/ui/BrandMark";
-import CrewChat from "../components/CrewChat";
+// import CrewChat from "../components/CrewChat";
 import { useEstimatorStore } from "../store/estimatorStore";
 import type { RoofSegmentStat } from "../types/solar";
+import { fetchAerialVideo, type BackendEstimate } from "../api/estimates";
 
 type ViewMode = "perspective" | "satellite" | "topdown";
 type ToolId = "select" | "lasso" | "measure" | "split" | "note";
@@ -108,9 +109,56 @@ export default function EstimatorPage() {
   const [activeTool, setActiveTool] = useState<ToolId>("select");
   const [materialTab, setMaterialTab] = useState<MaterialTab>("shingle");
   const [editLayout, setEditLayout] = useState(false);
-  const [leaveTarget, setLeaveTarget] = useState<string | null>(null);
   const [panelPositions, setPanelPositions] = useState<Record<string, PanelPos>>(loadPositions);
-  const [credits, setCredits] = useState("");
+  const [, setCredits] = useState("");
+  const [estimate, setEstimate] = useState<BackendEstimate | null>(null);
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem("latest-estimate");
+    if (!stored) return;
+    try {
+      setEstimate(JSON.parse(stored));
+    } catch {
+      /* ignore malformed cache */
+    }
+  }, []);
+
+  /* -- Aerial View state -- */
+  const [aerialState, setAerialState] = useState<
+    "idle" | "loading" | "active" | "processing" | "error"
+  >("idle");
+  const [aerialVideoUrl, setAerialVideoUrl] = useState<string | null>(null);
+  const [showAerialModal, setShowAerialModal] = useState(false);
+
+  const handleAerialClick = useCallback(async () => {
+    if (!estimate?.address) return;
+
+    if (aerialVideoUrl) {
+      setShowAerialModal(true);
+      return;
+    }
+
+    setAerialState("loading");
+    try {
+      const result = await fetchAerialVideo(estimate.address);
+      const url =
+        result.uris?.MP4_HIGH?.landscapeUri
+        ?? result.uris?.MP4_MEDIUM?.landscapeUri
+        ?? result.uris?.MP4_LOW?.landscapeUri;
+      if (result.state === "ACTIVE" && url) {
+        setAerialVideoUrl(url);
+        setAerialState("active");
+        setShowAerialModal(true);
+      } else if (result.state === "PROCESSING") {
+        setAerialState("processing");
+      } else {
+        setAerialState("error");
+      }
+    } catch (e) {
+      console.error("Aerial fetch failed:", e);
+      setAerialState("error");
+    }
+  }, [estimate?.address, aerialVideoUrl]);
 
   const panelDragRef = useRef<{ active: boolean; panelId: string; offsetX: number; offsetY: number }>({ active: false, panelId: "", offsetX: 0, offsetY: 0 });
 
@@ -150,28 +198,47 @@ export default function EstimatorPage() {
 
       {/* 3D Canvas */}
       <div className="absolute inset-0 z-0">
-        <Scene location={location} buildingInsights={buildingInsights} selectedIndex={selectedSegmentIndex} onSelectSegment={handleSelectSegment} onCreditsUpdate={setCredits} />
+        <Scene key={`${location?.lat ?? 0},${location?.lng ?? 0}`} location={location} buildingInsights={buildingInsights} selectedIndex={selectedSegmentIndex} onSelectSegment={handleSelectSegment} onCreditsUpdate={setCredits} />
       </div>
 
-      {/* Top nav */}
-      <div className="absolute top-5 left-1/2 -translate-x-1/2 z-40 max-w-[calc(100vw-48px)]">
-        <nav className="flex items-center py-3 pl-5 pr-3.5 bg-white/10 backdrop-blur-2xl rounded-[18px] shadow-[0_1px_0_rgba(255,255,255,0.10)_inset,0_8px_26px_rgba(0,0,0,0.25),0_0_0_1px_rgba(255,255,255,0.10)]" style={{ width: 1240 }}>
-          <div className="flex items-center gap-4 shrink-0">
-            <BrandMark size={30} />
-            <div className="flex flex-col gap-px px-1">
-              <span className="text-[13px] font-semibold text-white tracking-tight">Roof Estimate</span>
-              <span className="text-[9.5px] font-mono text-white/45 tracking-wider">EST-2418 · Draft</span>
-            </div>
-            <div className="w-px h-6.5 bg-white/12" />
-            <div className="flex flex-col gap-px px-1">
-              <span className="text-[9.5px] font-mono text-white/45 tracking-wider uppercase">PROPERTY</span>
-              <span className="text-xs font-semibold text-white font-mono">{address ?? "No address selected"}</span>
-            </div>
+      {/* ============================================================ */}
+      {/*  1. Top nav                                                   */}
+      {/* ============================================================ */}
+      <div className="absolute top-5 left-1/2 -translate-x-1/2 z-40">
+        <nav className="flex items-center gap-4 py-3 pl-5 pr-3.5 bg-white/10 backdrop-blur-2xl rounded-[18px] shadow-[0_1px_0_rgba(255,255,255,0.10)_inset,0_8px_26px_rgba(0,0,0,0.25),0_0_0_1px_rgba(255,255,255,0.10)]">
+          {/* Brand */}
+          <BrandMark size={30} />
+          <div className="flex flex-col gap-px px-1">
+            <span className="text-[13px] font-semibold text-white tracking-tight">
+              Re-roof estimate
+            </span>
+            <span className="text-[9.5px] font-mono text-white/45 tracking-wider">
+              {estimate?.estimate_id
+                ? `EST-${estimate.estimate_id.slice(0, 8).toUpperCase()} · Draft`
+                : "EST-2418 · Draft"}
+            </span>
           </div>
 
-          <div className="flex-1 flex items-center justify-center gap-1">
+          {/* Divider */}
+          <div className="w-px h-6.5 bg-white/12" />
+
+          {/* Property meta */}
+          <div className="flex flex-col gap-px px-1">
+            <span className="text-[9.5px] font-mono text-white/45 tracking-wider uppercase">
+              PROPERTY
+            </span>
+            <span className="text-xs font-semibold text-white font-mono truncate max-w-[280px]">
+              {estimate?.address ?? "412 W Holloway Ave · Tampa, FL"}
+            </span>
+          </div>
+
+          {/* Divider */}
+          <div className="w-px h-6.5 bg-white/12" />
+
+          {/* Step crumbs */}
+          <div className="flex items-center gap-1">
             {STEPS.map((step) => (
-              <button key={step.n} onClick={() => step.path !== "/estimator" && setLeaveTarget(step.path)}
+              <button key={step.n} onClick={() => step.path !== "/estimator" && navigate(step.path)}
                 className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-mono font-semibold transition-colors cursor-pointer border-none hover:bg-white/10 ${step.status === "current" ? "bg-blue/25 text-blue-bright" : step.status === "done" ? "bg-transparent text-white/80" : "bg-transparent text-white/45"}`}>
                 {step.status === "done" ? (
                   <span className="material-symbols-rounded text-[16px] text-green">check_circle</span>
@@ -188,11 +255,11 @@ export default function EstimatorPage() {
               <span className="material-symbols-rounded text-[20px]">save</span>
               <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 rounded-md bg-ink text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">Save</span>
             </button>
-            <button onClick={() => setLeaveTarget("/estimates")} className="group relative w-9 h-9 flex items-center justify-center rounded-[10px] cursor-pointer border transition-colors" style={{ background: "rgba(220,60,60,0.15)", color: "#dc3c3c", borderColor: "rgba(220,60,60,0.3)" }} onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(220,60,60,0.25)"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(220,60,60,0.15)"; }}>
+            <button onClick={() => navigate("/estimates")} className="group relative w-9 h-9 flex items-center justify-center rounded-[10px] cursor-pointer border transition-colors" style={{ background: "rgba(220,60,60,0.15)", color: "#dc3c3c", borderColor: "rgba(220,60,60,0.3)" }} onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(220,60,60,0.25)"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(220,60,60,0.15)"; }}>
               <span className="material-symbols-rounded text-[20px]">cancel</span>
               <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 rounded-md bg-ink text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">Cancel</span>
             </button>
-            <button onClick={() => setLeaveTarget("/pricing")} className="group relative w-9 h-9 flex items-center justify-center bg-white text-ink border-none rounded-[10px] cursor-pointer hover:bg-white/90 transition-colors">
+            <button onClick={() => navigate("/pricing")} className="group relative w-9 h-9 flex items-center justify-center bg-white text-ink border-none rounded-[10px] cursor-pointer hover:bg-white/90 transition-colors">
               <span className="material-symbols-rounded text-[20px]">arrow_forward</span>
               <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 rounded-md bg-ink text-white text-[11px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">Next</span>
             </button>
@@ -205,9 +272,32 @@ export default function EstimatorPage() {
         <div className="flex items-center justify-between mb-1">
           <span className="text-[9.5px] font-mono text-muted tracking-wider uppercase">ROOF SPEC · LIVE</span>
         </div>
-        <div className="text-[13px] font-semibold mb-0.5">{address ?? "No address"}</div>
+        <div className="text-[13px] font-semibold mb-2 break-words leading-tight">
+          {estimate?.address ?? "412 W Holloway Ave"}
+        </div>
+        {estimate?.satellite_image_url && (
+          <img
+            src={estimate.satellite_image_url}
+            alt="Satellite view of property"
+            className="w-full rounded-lg border border-hair mb-3"
+          />
+        )}
+        {estimate?.address && (
+          <button
+            onClick={handleAerialClick}
+            disabled={aerialState === "loading"}
+            className="w-full mb-3 py-2 px-3 rounded-lg bg-blue text-white text-[11.5px] font-semibold border-none cursor-pointer hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {aerialState === "loading" && "Loading…"}
+            {aerialState === "processing" && "Rendering — retry in a minute"}
+            {aerialState === "error" && "Couldn't load — retry"}
+            {(aerialState === "idle" || aerialState === "active") && "View 3D flyover →"}
+          </button>
+        )}
         <div className="text-[10.5px] font-mono text-muted mb-4">
-          {buildingInsights?.regionCode ? `Region ${buildingInsights.regionCode}` : "Loading building data..."}
+          {estimate?.solar?.total_roof_area_sq_ft != null
+            ? `${Math.round(estimate.solar.total_roof_area_sq_ft).toLocaleString()} sq ft · ${estimate.solar.segments?.length ?? 0} faces`
+            : "Parcel 191724-A · Hillsborough County"}
         </div>
 
         {sp ? (
@@ -356,26 +446,45 @@ export default function EstimatorPage() {
         ))}
       </div>
 
-      {/* Credits */}
-      {credits && <div className="absolute bottom-2 right-4 z-30 text-[9px] font-mono text-white/30">{credits}</div>}
+      {/* ============================================================ */}
+      {/*  7. Ask Crew FAB                                              */}
+      {/* ============================================================ */}
+      <button
+        className="absolute z-40 flex items-center gap-2 py-2.5 px-4 rounded-xl border-none cursor-pointer text-white text-[12.5px] font-semibold font-sans shadow-[0_4px_20px_rgba(56,104,198,0.35)]"
+        style={{
+          right: 20,
+          bottom: 24,
+          background: "linear-gradient(135deg, #4C85E5 0%, #3868C6 100%)",
+        }}
+      >
+        Ask Crew
+        <kbd className="font-mono text-[10px] text-white/70 bg-white/15 py-0.5 px-1.5 rounded ml-1">
+          ⌘K
+        </kbd>
+      </button>
 
-      {/* Crew chat */}
-      <CrewChat />
-
-      {/* Leave confirmation modal */}
-      {leaveTarget && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-[400px] p-6">
-            <div className="flex items-center gap-3 mb-2">
-              <span className="material-symbols-rounded text-[24px] text-amber-500">warning</span>
-              <h3 className="text-[16px] font-semibold text-ink">Unsaved changes</h3>
-            </div>
-            <p className="text-[13px] text-muted mb-6 leading-relaxed">You have unsaved changes. Would you like to save this estimate as a draft before leaving?</p>
-            <div className="flex flex-col gap-2">
-              <button onClick={() => { setLeaveTarget(null); navigate(leaveTarget); }} className="w-full py-2.5 rounded-lg bg-blue text-white text-[13px] font-semibold border-none cursor-pointer hover:bg-blue/90 transition-colors">Save as Draft & Leave</button>
-              <button onClick={() => { setLeaveTarget(null); navigate(leaveTarget); }} className="w-full py-2.5 rounded-lg bg-transparent text-[13px] font-semibold border cursor-pointer transition-colors" style={{ color: "#dc3c3c", borderColor: "rgba(220,60,60,0.2)" }}>Discard & Leave</button>
-              <button onClick={() => setLeaveTarget(null)} className="w-full py-2.5 rounded-lg bg-transparent text-muted text-[13px] font-medium border-none cursor-pointer hover:bg-hair transition-colors">Stay on page</button>
-            </div>
+      {/* ============================================================ */}
+      {/*  Aerial View modal                                            */}
+      {/* ============================================================ */}
+      {showAerialModal && aerialVideoUrl && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/85 flex items-center justify-center p-8"
+          onClick={() => setShowAerialModal(false)}
+        >
+          <div className="relative" onClick={(e) => e.stopPropagation()}>
+            <video
+              src={aerialVideoUrl}
+              autoPlay
+              loop
+              controls
+              className="max-w-[90vw] max-h-[85vh] rounded-xl shadow-2xl"
+            />
+            <button
+              onClick={() => setShowAerialModal(false)}
+              className="absolute -top-3 -right-3 w-9 h-9 rounded-full bg-white text-ink hover:bg-white/90 cursor-pointer border-none shadow-lg flex items-center justify-center text-[16px] font-semibold"
+            >
+              ✕
+            </button>
           </div>
         </div>
       )}

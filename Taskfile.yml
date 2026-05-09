@@ -24,6 +24,12 @@ tasks:
     cmds:
       - uv run pytest tests/ -v
 
+  frontend:dev:
+    desc: Run frontend Vite dev server with secrets injected from 1Password
+    dir: frontend
+    cmds:
+      - op run --env-file=.env.local -- pnpm dev
+
   backend:build:
     desc: Build backend Docker image
     dir: backend

@@ -4,9 +4,10 @@ import DarkLayout from "../components/layout/DarkLayout";
 import GlassNav from "../components/ui/GlassNav";
 import BrandMark from "../components/ui/BrandMark";
 import { useProperties } from "../hooks/useEstimates";
-import { geocode } from "../api/geocode";
-import { fetchBuildingInsights } from "../api/solar";
+// import { geocode } from "../api/geocode";
+// import { fetchBuildingInsights } from "../api/solar";
 import { useEstimatorStore } from "../store/estimatorStore";
+import { startEstimate } from "../api/estimates";
 import type { Property } from "../types/estimate";
 
 /* ------------------------------------------------------------------ */
@@ -210,23 +211,20 @@ export default function AddressPage() {
   const { setLocation, setBuildingInsights } = useEstimatorStore();
 
   const selectProperty = useCallback(
-    (property: Property) => {
+    async (property: Property) => {
       setIsOpen(false);
       setLoading(true);
 
-      const fullAddress = `${property.line1}, ${property.line2}`;
-      geocode(fullAddress)
-        .then((loc) => {
-          setLocation(loc, fullAddress);
-          return fetchBuildingInsights(loc.lat, loc.lng);
-        })
-        .then((insights) => {
-          setBuildingInsights(insights);
-        })
-        .catch((err) => {
-          console.error("Failed to load building data:", err);
-          setBuildingInsights(null);
-        });
+      const addressString = `${property.line1}, ${property.line2}`;
+      try {
+        const result = await startEstimate(addressString);
+        console.log("Backend estimate result:", result);
+        sessionStorage.setItem("latest-estimate", JSON.stringify(result));
+
+        setLocation({ lat: result.lat, lng: result.lng }, result.address);
+      } catch (e) {
+        console.error("Failed to call backend:", e);
+      }
     },
     [setLocation, setBuildingInsights],
   );
