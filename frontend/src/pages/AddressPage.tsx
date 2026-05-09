@@ -4,6 +4,9 @@ import DarkLayout from "../components/layout/DarkLayout";
 import GlassNav from "../components/ui/GlassNav";
 import BrandMark from "../components/ui/BrandMark";
 import { useProperties } from "../hooks/useEstimates";
+import { geocode } from "../api/geocode";
+import { fetchBuildingInsights } from "../api/solar";
+import { useEstimatorStore } from "../store/estimatorStore";
 import type { Property } from "../types/estimate";
 
 /* ------------------------------------------------------------------ */
@@ -11,18 +14,23 @@ import type { Property } from "../types/estimate";
 /* ------------------------------------------------------------------ */
 
 const navSteps = [
-  { num: 1, label: "Address", active: true },
-  { num: 2, label: "Capture", active: false },
-  { num: 3, label: "Faces", active: false },
-  { num: 4, label: "Materials", active: false },
-  { num: 5, label: "Proposal", active: false },
+  { num: 1, label: "Address", active: true, path: "/address" },
+  { num: 2, label: "Capture", active: false, path: "/estimator" },
+  { num: 3, label: "Faces", active: false, path: "/estimator" },
+  { num: 4, label: "Materials", active: false, path: "/pricing" },
+  { num: 5, label: "Proposal", active: false, path: "/proposal" },
 ];
 
 function StepDots() {
+  const nav = useNavigate();
   return (
     <div className="flex items-center gap-5">
       {navSteps.map((step, i) => (
-        <div key={step.num} className="flex items-center gap-2">
+        <button
+          key={step.num}
+          onClick={() => nav(step.path)}
+          className="flex items-center gap-2 bg-transparent border-none cursor-pointer p-0"
+        >
           {i > 0 && <div className="w-4 h-px bg-white/12" />}
           <div
             className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-mono font-bold ${
@@ -40,7 +48,7 @@ function StepDots() {
           >
             {step.label}
           </span>
-        </div>
+        </button>
       ))}
     </div>
   );
@@ -55,16 +63,6 @@ function SearchIcon() {
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#93a0b8" strokeWidth="1.8">
       <circle cx="7" cy="7" r="4.5" />
       <path d="M10.5 10.5L14 14" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function GeoIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="8" cy="8" r="6" />
-      <circle cx="8" cy="8" r="2" />
-      <path d="M8 2v2M8 12v2M2 8h2M12 8h2" />
     </svg>
   );
 }
@@ -209,12 +207,28 @@ export default function AddressPage() {
     }
   }, [activeIndex]);
 
+  const { setLocation, setBuildingInsights } = useEstimatorStore();
+
   const selectProperty = useCallback(
-    (_property: Property) => {
+    (property: Property) => {
       setIsOpen(false);
       setLoading(true);
+
+      const fullAddress = `${property.line1}, ${property.line2}`;
+      geocode(fullAddress)
+        .then((loc) => {
+          setLocation(loc, fullAddress);
+          return fetchBuildingInsights(loc.lat, loc.lng);
+        })
+        .then((insights) => {
+          setBuildingInsights(insights);
+        })
+        .catch((err) => {
+          console.error("Failed to load building data:", err);
+          setBuildingInsights(null);
+        });
     },
-    [],
+    [setLocation, setBuildingInsights],
   );
 
   const handleLoadingComplete = useCallback(() => {
@@ -333,12 +347,6 @@ export default function AddressPage() {
                 placeholder="Enter a street address..."
                 autoFocus
               />
-              <button
-                className="p-2 text-muted-2 hover:text-ink bg-transparent border-none cursor-pointer rounded-lg hover:bg-ink/[0.04] transition-colors"
-                title="Use my location"
-              >
-                <GeoIcon />
-              </button>
               <kbd className="font-mono text-[10.5px] text-muted-2 bg-paper-2 py-1 px-2 rounded-md border border-hair">
                 &#8984;K
               </kbd>
@@ -387,29 +395,32 @@ export default function AddressPage() {
                   </button>
                 ))}
 
-                {/* footer with keyboard hints */}
-                <div className="flex items-center gap-4 px-5 py-2.5 border-t border-hair bg-paper-2/50">
-                  <div className="flex items-center gap-1.5">
-                    <kbd className="font-mono text-[9px] text-muted-2 bg-white py-0.5 px-1.5 rounded border border-hair shadow-sm">
-                      &uarr;
-                    </kbd>
-                    <kbd className="font-mono text-[9px] text-muted-2 bg-white py-0.5 px-1.5 rounded border border-hair shadow-sm">
-                      &darr;
-                    </kbd>
-                    <span className="text-[10px] text-muted-2 ml-0.5">navigate</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <kbd className="font-mono text-[9px] text-muted-2 bg-white py-0.5 px-1.5 rounded border border-hair shadow-sm">
-                      &crarr;
-                    </kbd>
-                    <span className="text-[10px] text-muted-2 ml-0.5">select</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <kbd className="font-mono text-[9px] text-muted-2 bg-white py-0.5 px-1.5 rounded border border-hair shadow-sm">
-                      esc
-                    </kbd>
-                    <span className="text-[10px] text-muted-2 ml-0.5">close</span>
-                  </div>
+              </div>
+            )}
+
+            {/* footer with keyboard hints — visible whenever dropdown is open */}
+            {isOpen && (
+              <div className="flex items-center gap-4 px-5 py-2.5 border-t border-hair bg-paper-2/50">
+                <div className="flex items-center gap-1.5">
+                  <kbd className="font-mono text-[9px] text-muted-2 bg-white py-0.5 px-1.5 rounded border border-hair shadow-sm">
+                    &uarr;
+                  </kbd>
+                  <kbd className="font-mono text-[9px] text-muted-2 bg-white py-0.5 px-1.5 rounded border border-hair shadow-sm">
+                    &darr;
+                  </kbd>
+                  <span className="text-[10px] text-muted-2 ml-0.5">navigate</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <kbd className="font-mono text-[9px] text-muted-2 bg-white py-0.5 px-1.5 rounded border border-hair shadow-sm">
+                    &crarr;
+                  </kbd>
+                  <span className="text-[10px] text-muted-2 ml-0.5">select</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <kbd className="font-mono text-[9px] text-muted-2 bg-white py-0.5 px-1.5 rounded border border-hair shadow-sm">
+                    esc
+                  </kbd>
+                  <span className="text-[10px] text-muted-2 ml-0.5">close</span>
                 </div>
               </div>
             )}
