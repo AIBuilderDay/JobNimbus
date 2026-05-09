@@ -60,6 +60,12 @@ tasks:
     cmds:
       - uv run pytest tests/ -v
 
+  backend:precache:
+    desc: Precache EagleView reports for all 10 benchmark properties (~20 min wall-clock)
+    dir: backend
+    cmds:
+      - op run --env-file=.env -- uv run python -m scripts.precache_eagleview
+
   frontend:dev:
     desc: Run frontend Vite dev server with secrets injected from 1Password
     dir: frontend
