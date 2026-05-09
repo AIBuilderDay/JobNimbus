@@ -1,4 +1,14 @@
-import os
+"""Estimate lifecycle endpoints.
+
+Owns: starting an estimate (geocode + Solar in one call), reading it back,
+and refining segment selection. Pricing/proposal/finalize live in their
+own routers.
+
+In-memory estimate store (`_estimates`) is shared with the pricing/proposal/
+finalize routers via this module. SQLite is fine for listings but the
+estimator working state is ephemeral by design — it doesn't need to survive
+deploys.
+"""
 import uuid
 from typing import Any
 
@@ -6,14 +16,16 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
 from logger import get_logger
+from routers.model3d import _models as model_store, _run_full_pipeline
 from services.google.geocoding import geocode
 from services.google.solar import get_solar_data
 from services.google.static_maps import build_url
-from routers.model3d import _models as model_store, _run_full_pipeline
+from settings import settings
 
 log = get_logger(__name__)
-router = APIRouter(prefix="/api/estimate")
+router = APIRouter(prefix="/api/estimate", tags=["estimate"])
 
+# Shared in-memory store. Keyed by estimate_id. Other routers import this.
 _estimates: dict[str, dict[str, Any]] = {}
 
 
@@ -37,6 +49,14 @@ async def start_estimate(
     req: StartEstimateRequest,
     background_tasks: BackgroundTasks,
 ) -> dict[str, Any]:
+    """Start a new estimate from an address.
+
+    Geocodes (unless lat/lng pre-supplied), fetches Google Solar building
+    insights, and kicks off 3D model generation in the background. The
+    Solar payload returned here is what the frontend renders on the
+    estimator and pricing pages — the slanted roof area lives at
+    `solar.total_roof_area_sq_ft`.
+    """
     estimate_id = str(uuid.uuid4())
     log.info(
         "POST /api/estimate/start estimate_id=%s address=%s lat=%s lng=%s",
@@ -57,8 +77,7 @@ async def start_estimate(
 
     solar = await get_solar_data(lat, lng)
 
-    # Kick off 3D model generation only if Google Maps API key is available
-    if os.environ.get("GOOGLE_MAPS_API_KEY"):
+    if settings.GOOGLE_MAPS_API_KEY:
         model_store[estimate_id] = {"status": "pending", "glb": None, "error": None}
         background_tasks.add_task(_run_full_pipeline, estimate_id, lat, lng)
     else:
@@ -80,7 +99,12 @@ async def start_estimate(
         "confidence_range": None,
     }
     _estimates[estimate_id] = payload
-    log.info("estimate_id=%s ready (solar_coverage=%s)", estimate_id, solar is not None)
+    log.info(
+        "estimate_id=%s ready solar_coverage=%s segments=%d",
+        estimate_id,
+        solar is not None,
+        len(solar["segments"]) if solar else 0,
+    )
     return payload
 
 

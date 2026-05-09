@@ -13,7 +13,7 @@ from services.tripo import generate_segmented_mesh
 from settings import settings
 
 log = get_logger(__name__)
-router = APIRouter(prefix="/api/model3d")
+router = APIRouter(prefix="/api/model3d", tags=["model3d"])
 
 _models: dict[str, dict[str, Any]] = {}
 
