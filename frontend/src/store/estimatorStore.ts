@@ -6,11 +6,13 @@ interface EstimatorState {
   location: { lat: number; lng: number } | null;
   address: string | null;
   buildingInsights: BuildingInsightsResponse | null;
-  selectedSegmentIndex: number;
+  selectedSegmentIndices: number[];
 
   setLocation: (loc: { lat: number; lng: number }, address: string) => void;
   setBuildingInsights: (data: BuildingInsightsResponse | null) => void;
-  setSelectedSegmentIndex: (index: number) => void;
+  toggleSegmentSelection: (index: number) => void;
+  setSegmentSelection: (indices: number[]) => void;
+  clearSegmentSelection: () => void;
   reset: () => void;
 }
 
@@ -20,17 +22,27 @@ export const useEstimatorStore = create<EstimatorState>()(
       location: null,
       address: null,
       buildingInsights: null,
-      selectedSegmentIndex: -1,
+      selectedSegmentIndices: [],
 
       setLocation: (loc, address) => set({ location: loc, address }),
       setBuildingInsights: (data) => set({ buildingInsights: data }),
-      setSelectedSegmentIndex: (index) => set({ selectedSegmentIndex: index }),
+      toggleSegmentSelection: (index) =>
+        set((state) => {
+          const exists = state.selectedSegmentIndices.includes(index);
+          return {
+            selectedSegmentIndices: exists
+              ? state.selectedSegmentIndices.filter((i) => i !== index)
+              : [...state.selectedSegmentIndices, index],
+          };
+        }),
+      setSegmentSelection: (indices) => set({ selectedSegmentIndices: indices }),
+      clearSegmentSelection: () => set({ selectedSegmentIndices: [] }),
       reset: () =>
         set({
           location: null,
           address: null,
           buildingInsights: null,
-          selectedSegmentIndex: -1,
+          selectedSegmentIndices: [],
         }),
     }),
     {

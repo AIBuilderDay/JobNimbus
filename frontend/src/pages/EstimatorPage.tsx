@@ -6,6 +6,7 @@ import BrandMark from "../components/ui/BrandMark";
 import { useEstimatorStore } from "../store/estimatorStore";
 import type { RoofSegmentStat } from "../types/solar";
 import { fetchAerialVideo, type BackendEstimate } from "../api/estimates";
+import RoofBlueprint, { type BlueprintSegment } from "../components/RoofBlueprint";
 
 type ViewMode = "perspective" | "satellite" | "topdown";
 type ToolId = "select" | "lasso" | "measure" | "split" | "note";
@@ -100,10 +101,17 @@ function GlassPanel({ id, children, className = "", style, editLayout, positions
 
 export default function EstimatorPage() {
   const navigate = useNavigate();
-  const { location, address, buildingInsights, selectedSegmentIndex, setSelectedSegmentIndex } = useEstimatorStore();
+  const { location, address, buildingInsights, selectedSegmentIndices, toggleSegmentSelection, clearSegmentSelection } = useEstimatorStore();
 
   const segments = buildingInsights?.solarPotential.roofSegmentStats ?? [];
-  const selectedSegment: RoofSegmentStat | null = selectedSegmentIndex >= 0 ? segments[selectedSegmentIndex] ?? null : null;
+  const primarySegmentIndex = selectedSegmentIndices.length > 0
+    ? selectedSegmentIndices[selectedSegmentIndices.length - 1]
+    : -1;
+  const selectedSegment: RoofSegmentStat | null = primarySegmentIndex >= 0 ? segments[primarySegmentIndex] ?? null : null;
+  const selectedAreaFt2 = selectedSegmentIndices.reduce(
+    (sum, i) => sum + (segments[i] ? m2ToFt2(segments[i].stats.areaMeters2) : 0),
+    0,
+  );
 
   const [mode, setMode] = useState<ViewMode>("perspective");
   const [activeTool, setActiveTool] = useState<ToolId>("select");
@@ -187,8 +195,9 @@ export default function EstimatorPage() {
   }, [editLayout]);
 
   const handleSelectSegment = useCallback((_segment: RoofSegmentStat | null, index: number) => {
-    setSelectedSegmentIndex(index);
-  }, [setSelectedSegmentIndex]);
+    if (index < 0) clearSegmentSelection();
+    else toggleSegmentSelection(index);
+  }, [toggleSegmentSelection, clearSegmentSelection]);
 
   const sp = buildingInsights?.solarPotential;
   const totalAreaFt2 = sp ? m2ToFt2(sp.wholeRoofStats.areaMeters2) : 0;
@@ -196,9 +205,42 @@ export default function EstimatorPage() {
   return (
     <div className="fixed inset-0 font-sans text-ink overflow-hidden select-none" style={{ background: "linear-gradient(160deg, #1a2440 0%, #0e1830 100%)" }}>
 
-      {/* 3D Canvas */}
+      {/* 3D Canvas / Top-down */}
       <div className="absolute inset-0 z-0">
-        <Scene key={`${location?.lat ?? 0},${location?.lng ?? 0}`} location={location} buildingInsights={buildingInsights} selectedIndex={selectedSegmentIndex} onSelectSegment={handleSelectSegment} onCreditsUpdate={setCredits} />
+        {mode === "topdown" ? (
+          <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: "#0e1830" }}>
+            {segments.length > 0 ? (
+              <RoofBlueprint
+                segments={segments.map((seg, i): BlueprintSegment => ({
+                  id: i,
+                  pitch_degrees: seg.pitchDegrees ?? null,
+                  azimuth_degrees: seg.azimuthDegrees ?? null,
+                  area_sq_ft: m2ToFt2(seg.stats.areaMeters2),
+                  bounding_box: seg.boundingBox,
+                  center: seg.center,
+                }))}
+                width={820}
+                height={600}
+                dark
+                selectedSegmentIds={selectedSegmentIndices}
+                onSegmentClick={(seg) => toggleSegmentSelection(seg.id)}
+                style={{ display: "block", width: "min(680px, 70vw, 70vh * 1.367)" }}
+              />
+            ) : (
+              <div className="text-white/55 text-[13px]">No roof segments to display</div>
+            )}
+          </div>
+        ) : (
+          <Scene
+            key={`${mode}-${buildingInsights?.center.latitude ?? location?.lat ?? 0},${buildingInsights?.center.longitude ?? location?.lng ?? 0}`}
+            location={location}
+            buildingInsights={buildingInsights}
+            selectedIndex={primarySegmentIndex}
+            onSelectSegment={handleSelectSegment}
+            onCreditsUpdate={setCredits}
+            topDown={false}
+          />
+        )}
       </div>
 
       {/* ============================================================ */}
@@ -275,13 +317,6 @@ export default function EstimatorPage() {
         <div className="text-[13px] font-semibold mb-2 break-words leading-tight">
           {estimate?.address ?? "412 W Holloway Ave"}
         </div>
-        {estimate?.satellite_image_url && (
-          <img
-            src={estimate.satellite_image_url}
-            alt="Satellite view of property"
-            className="w-full rounded-lg border border-hair mb-3"
-          />
-        )}
         {estimate?.address && (
           <button
             onClick={handleAerialClick}
@@ -356,18 +391,27 @@ export default function EstimatorPage() {
         </div>
         <div className="text-[11px] text-muted mb-1">Roof segments</div>
         {sp && (
-          <div className="text-[13px] font-semibold font-mono mb-3">
+          <div className="text-[13px] font-semibold font-mono mb-1">
             {totalAreaFt2.toLocaleString(undefined, { maximumFractionDigits: 0 })} sf
             <span className="text-muted-2 font-normal text-[11px] ml-1">total roof</span>
           </div>
         )}
+        {selectedSegmentIndices.length > 0 && (
+          <div className="text-[13px] font-semibold font-mono mb-3 text-blue">
+            {selectedAreaFt2.toLocaleString(undefined, { maximumFractionDigits: 0 })} sf
+            <span className="text-muted-2 font-normal text-[11px] ml-1">
+              selected · {selectedSegmentIndices.length} segment{selectedSegmentIndices.length === 1 ? "" : "s"}
+            </span>
+          </div>
+        )}
+        {selectedSegmentIndices.length === 0 && sp && <div className="mb-2" />}
         {segments.length > 0 ? (
           <div className="space-y-0.5 max-h-[400px] overflow-y-auto">
             {segments.map((seg, i) => {
-              const isSel = i === selectedSegmentIndex;
+              const isSel = selectedSegmentIndices.includes(i);
               const areaFt = m2ToFt2(seg.stats.areaMeters2);
               return (
-                <button key={i} onClick={() => setSelectedSegmentIndex(isSel ? -1 : i)}
+                <button key={i} onClick={() => toggleSegmentSelection(i)}
                   className={`w-full flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer transition-colors border-none text-left font-sans ${isSel ? "bg-blue-soft" : "bg-transparent hover:bg-hair/40"}`}>
                   <div className={`w-3.5 h-3.5 rounded-sm border-2 flex items-center justify-center ${isSel ? "border-blue bg-blue" : "border-hair"}`}>
                     {isSel && <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4L3 5.5L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
@@ -424,7 +468,7 @@ export default function EstimatorPage() {
           <span className="text-[16px] leading-none">↩</span>
           <span className="text-[9px]">Undo</span>
         </button>
-        <button onClick={() => setSelectedSegmentIndex(-1)} title="Deselect" className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg text-[11px] font-mono border-none cursor-pointer bg-transparent text-white/55 hover:text-white/80 hover:bg-white/8 transition-colors">
+        <button onClick={() => clearSegmentSelection()} title="Deselect" className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg text-[11px] font-mono border-none cursor-pointer bg-transparent text-white/55 hover:text-white/80 hover:bg-white/8 transition-colors">
           <span className="text-[16px] leading-none">⟲</span>
           <span className="text-[9px]">Reset</span>
         </button>

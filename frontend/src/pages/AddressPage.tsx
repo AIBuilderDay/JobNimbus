@@ -5,7 +5,7 @@ import GlassNav from "../components/ui/GlassNav";
 import BrandMark from "../components/ui/BrandMark";
 import { useProperties } from "../hooks/useEstimates";
 // import { geocode } from "../api/geocode";
-// import { fetchBuildingInsights } from "../api/solar";
+import { fetchBuildingInsights } from "../api/solar";
 import { useEstimatorStore } from "../store/estimatorStore";
 import { startEstimate } from "../api/estimates";
 import type { Property } from "../types/estimate";
@@ -222,6 +222,14 @@ export default function AddressPage() {
         sessionStorage.setItem("latest-estimate", JSON.stringify(result));
 
         setLocation({ lat: result.lat, lng: result.lng }, result.address);
+
+        try {
+          const insights = await fetchBuildingInsights(result.lat, result.lng);
+          setBuildingInsights(insights);
+        } catch (insightsErr) {
+          console.error("Failed to fetch building insights:", insightsErr);
+          setBuildingInsights(null);
+        }
       } catch (e) {
         console.error("Failed to call backend:", e);
       }

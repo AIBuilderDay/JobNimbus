@@ -12,6 +12,7 @@ interface Props {
   selectedIndex: number;
   onSelectSegment: (segment: RoofSegmentStat | null, index: number) => void;
   onCreditsUpdate: (credits: string) => void;
+  topDown?: boolean;
 }
 
 export default function Scene({
@@ -20,25 +21,32 @@ export default function Scene({
   selectedIndex,
   onSelectSegment,
   onCreditsUpdate,
+  topDown = false,
 }: Props) {
   const viewState = useMemo(() => {
-    if (!location) {
+    // Prefer the building center (where Solar actually measured) over the geocoded
+    // address point (often a driveway/parking spot offset from the structure).
+    const center = buildingInsights?.center
+      ? { lng: buildingInsights.center.longitude, lat: buildingInsights.center.latitude }
+      : location;
+
+    if (!center) {
       return {
         longitude: -122.084,
         latitude: 37.422,
-        zoom: 18,
-        pitch: 60,
+        zoom: topDown ? 19 : 18,
+        pitch: topDown ? 0 : 60,
         bearing: 0,
       };
     }
     return {
-      longitude: location.lng,
-      latitude: location.lat,
-      zoom: 18,
-      pitch: 60,
+      longitude: center.lng,
+      latitude: center.lat,
+      zoom: topDown ? 19 : 18,
+      pitch: topDown ? 0 : 60,
       bearing: 0,
     };
-  }, [location]);
+  }, [location, buildingInsights, topDown]);
 
   const handleTilesetLoad = useCallback(
     (tileset: unknown) => {

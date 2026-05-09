@@ -8,6 +8,7 @@ const PricingPage = lazy(() => import("./pages/PricingPage"));
 const ProposalPage = lazy(() => import("./pages/ProposalPage"));
 const FinalizationPage = lazy(() => import("./pages/FinalizationPage"));
 const EstimatesPage = lazy(() => import("./pages/EstimatesPage"));
+const BlueprintPage = lazy(() => import("./pages/BlueprintPage"));
 
 function Loading() {
   return (
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="/proposal" element={<ProposalPage />} />
           <Route path="/finalization" element={<FinalizationPage />} />
           <Route path="/estimates" element={<EstimatesPage />} />
+          <Route path="/blueprint" element={<BlueprintPage />} />
         </Routes>
       </Suspense>
     </BrowserRouter>
