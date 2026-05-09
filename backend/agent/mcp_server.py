@@ -50,6 +50,7 @@ from routers.proposal import (
 from routers.listings import list_estimates as _list_estimates
 from routers.catalog import list_materials as _list_materials
 from routers.places import autocomplete_places as _autocomplete_places
+from services.summary import build_markdown_summary
 
 log = get_logger(__name__)
 
@@ -425,6 +426,33 @@ async def list_materials(tab: str | None = None) -> dict[str, Any]:
         return _list_materials(tab)
     except Exception as e:  # noqa: BLE001
         raise _wrap_http(e, "list_materials", tab=tab)
+
+
+@mcp.tool
+async def summarize_estimate(estimate_id: str) -> str:
+    """Return a markdown summary of the full estimate — address (with
+    parsed city/state/zip), roof measurement, selected material, line
+    items, **itemized add-ons** (drip edge, ice & water shield, ridge
+    vent, etc., priced as ballpark estimates from the slanted sqft),
+    pricing breakdown, and financing options.
+
+    **Call this AFTER you have the basic roofing pricing info** — at
+    minimum after `start_estimate`, ideally after `compute_pricing`.
+    Sections without data are marked so you can self-correct (e.g.
+    "_Pricing not yet computed_"). The returned markdown is meant to
+    drop straight into chat — no further formatting needed.
+
+    Args:
+        estimate_id: ID returned by `start_estimate`.
+    """
+    log.info("mcp.summarize_estimate estimate_id=%s", estimate_id)
+    estimate = _estimates.get(estimate_id)
+    if not estimate:
+        log.warning("mcp.summarize_estimate not found estimate_id=%s", estimate_id)
+        raise ToolError(f"404 Estimate {estimate_id} not found")
+    md = build_markdown_summary(estimate)
+    log.info("mcp.summarize_estimate ok %d bytes", len(md))
+    return md
 
 
 @mcp.tool

@@ -25,6 +25,7 @@ from routers import (
     pricing,
     proposal,
     roof_polygons,
+    summary,
 )
 
 log = get_logger(__name__)
@@ -96,6 +97,7 @@ app.include_router(estimate.router)
 app.include_router(pricing.router)
 app.include_router(proposal.router)
 app.include_router(finalize.router)
+app.include_router(summary.router)
 app.include_router(blueprint.router)
 
 # Supporting
