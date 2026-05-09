@@ -1,7 +1,7 @@
-import type { BuildingInsightsResponse, RoofSegmentStat } from "../types/solar";
+import type { BuildingInsightsResponse, RoofSegment } from "../types/solar";
 
 interface Props {
-  segment: RoofSegmentStat | null;
+  segment: RoofSegment | null;
   buildingInsights: BuildingInsightsResponse | null;
 }
 
@@ -9,10 +9,6 @@ function azimuthToCompass(deg: number): string {
   const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
   const idx = Math.round(deg / 45) % 8;
   return dirs[idx];
-}
-
-function m2ToFt2(m2: number): number {
-  return m2 * 10.7639;
 }
 
 export default function RoofInfoPanel({ segment, buildingInsights }: Props) {
@@ -24,8 +20,6 @@ export default function RoofInfoPanel({ segment, buildingInsights }: Props) {
     );
   }
 
-  const sp = buildingInsights.solarPotential;
-
   return (
     <div className="flex flex-col gap-4 p-5">
       <div>
@@ -35,19 +29,19 @@ export default function RoofInfoPanel({ segment, buildingInsights }: Props) {
         <div className="grid grid-cols-2 gap-2 text-sm">
           <Stat
             label="Roof Area"
-            value={`${sp.wholeRoofStats.areaMeters2.toFixed(0)} m²`}
-          />
-          <Stat
-            label="Max Panels"
-            value={sp.maxArrayPanelsCount.toString()}
-          />
-          <Stat
-            label="Peak Sun"
-            value={`${sp.maxSunshineHoursPerYear.toFixed(0)} hrs/yr`}
+            value={`${Math.round(buildingInsights.total_roof_area_sq_ft).toLocaleString()} sf`}
           />
           <Stat
             label="Segments"
-            value={sp.roofSegmentStats.length.toString()}
+            value={buildingInsights.segments.length.toString()}
+          />
+          <Stat
+            label="Imagery"
+            value={buildingInsights.imagery_quality ?? "—"}
+          />
+          <Stat
+            label="Ground Area"
+            value={`${Math.round(buildingInsights.segments.reduce((s, seg) => s + seg.ground_area_sq_ft, 0)).toLocaleString()} sf`}
           />
         </div>
       </div>
@@ -60,19 +54,19 @@ export default function RoofInfoPanel({ segment, buildingInsights }: Props) {
           <div className="grid grid-cols-2 gap-2 text-sm">
             <Stat
               label="Pitch"
-              value={`${segment.pitchDegrees.toFixed(1)}°`}
+              value={segment.pitch_degrees != null ? `${segment.pitch_degrees.toFixed(1)}°` : "—"}
             />
             <Stat
               label="Azimuth"
-              value={`${segment.azimuthDegrees.toFixed(0)}° ${azimuthToCompass(segment.azimuthDegrees)}`}
+              value={segment.azimuth_degrees != null ? `${segment.azimuth_degrees.toFixed(0)}° ${azimuthToCompass(segment.azimuth_degrees)}` : "—"}
             />
             <Stat
               label="Area"
-              value={`${segment.stats.areaMeters2.toFixed(0)} m² / ${m2ToFt2(segment.stats.areaMeters2).toFixed(0)} ft²`}
+              value={`${Math.round(segment.area_sq_ft).toLocaleString()} sf`}
             />
             <Stat
-              label="Annual Sun"
-              value={`${(segment.stats.sunshineQuantiles[5] ?? 0).toFixed(0)} hrs`}
+              label="Height"
+              value={segment.plane_height_meters != null ? `${(segment.plane_height_meters * 3.28084).toFixed(1)} ft` : "—"}
             />
           </div>
         </div>

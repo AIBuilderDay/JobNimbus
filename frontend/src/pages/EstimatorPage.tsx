@@ -1,11 +1,14 @@
 import { useState, useCallback, useRef, useEffect, type ReactNode, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import Scene from "../components/Scene";
+import ModelViewer from "../components/ModelViewer";
 import BrandMark from "../components/ui/BrandMark";
-// import CrewChat from "../components/CrewChat";
+import CrewChat from "../components/CrewChat";
 import { useEstimatorStore } from "../store/estimatorStore";
-import type { RoofSegmentStat } from "../types/solar";
-import { fetchAerialVideo, type BackendEstimate } from "../api/estimates";
+import { pollModelStatus, getModelUrl } from "../api/model3d";
+import { toast } from "sonner";
+import type { RoofSegment } from "../types/solar";
+import { fetchAerialVideo } from "../api/estimates";
 import RoofBlueprint, { type BlueprintSegment } from "../components/RoofBlueprint";
 
 type ViewMode = "perspective" | "satellite" | "topdown";
@@ -65,17 +68,30 @@ function loadPositions(): Record<string, PanelPos> {
   return {};
 }
 
+let saveTimer: ReturnType<typeof setTimeout>;
 function savePositions(positions: Record<string, PanelPos>) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(positions));
-}
-
-function m2ToFt2(m2: number): number {
-  return m2 * 10.7639;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(positions)), 200);
 }
 
 function azimuthToCompass(deg: number): string {
   const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
   return dirs[Math.round(deg / 45) % 8];
+}
+
+function stripCounty(s: string): string {
+  return s.replace(/\s*[·\-–]\s*\w+\s+County/i, "").trim();
+}
+
+function parseAddress(addr: string) {
+  const cleaned = stripCounty(addr);
+  const parts = cleaned.split(",").map((s) => s.trim());
+  const noCounty = parts.filter((p) => !/\bcounty\b/i.test(p));
+  const street = noCounty[0] ?? cleaned;
+  const city = noCounty[1] ?? "";
+  const stateZipRaw = noCounty.length >= 4 ? noCounty[3] : noCounty[2] ?? "";
+  const stateZip = stateZipRaw.replace(/\s*USA$/i, "").trim();
+  return { street, city, stateZip };
 }
 
 function GlassPanel({ id, children, className = "", style, editLayout, positions, onDragStart }: {
@@ -90,7 +106,7 @@ function GlassPanel({ id, children, className = "", style, editLayout, positions
   };
   return (
     <div
-      className={`absolute backdrop-blur-2xl rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.18),0_0_0_1px_rgba(255,255,255,0.12)] ${className} ${editLayout ? "border-2 border-dashed border-blue cursor-move" : ""}`}
+      className={`absolute backdrop-blur-md rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.18),0_0_0_1px_rgba(255,255,255,0.12)] ${className} ${editLayout ? "border-2 border-dashed border-blue cursor-move" : ""}`}
       style={mergedStyle}
       onMouseDown={editLayout ? (e) => onDragStart(id, e) : undefined}
     >
@@ -101,35 +117,21 @@ function GlassPanel({ id, children, className = "", style, editLayout, positions
 
 export default function EstimatorPage() {
   const navigate = useNavigate();
-  const { location, address, buildingInsights, selectedSegmentIndices, toggleSegmentSelection, clearSegmentSelection } = useEstimatorStore();
+  const {
+    location, address, satelliteImageUrl, buildingInsights, selectedSegmentIndex, setSelectedSegmentIndex,
+    estimateId, modelStatus, modelUrl, modelError,
+    setModelStatus, setModelUrl, setModelError,
+  } = useEstimatorStore();
 
-  const segments = buildingInsights?.solarPotential.roofSegmentStats ?? [];
-  const primarySegmentIndex = selectedSegmentIndices.length > 0
-    ? selectedSegmentIndices[selectedSegmentIndices.length - 1]
-    : -1;
-  const selectedSegment: RoofSegmentStat | null = primarySegmentIndex >= 0 ? segments[primarySegmentIndex] ?? null : null;
-  const selectedAreaFt2 = selectedSegmentIndices.reduce(
-    (sum, i) => sum + (segments[i] ? m2ToFt2(segments[i].stats.areaMeters2) : 0),
-    0,
-  );
+  const segments = buildingInsights?.segments ?? [];
+  const selectedSegment: RoofSegment | null = selectedSegmentIndex >= 0 ? segments[selectedSegmentIndex] ?? null : null;
 
-  const [mode, setMode] = useState<ViewMode>("perspective");
+  const [mode, setMode] = useState<ViewMode>("satellite");
   const [activeTool, setActiveTool] = useState<ToolId>("select");
   const [materialTab, setMaterialTab] = useState<MaterialTab>("shingle");
   const [editLayout, setEditLayout] = useState(false);
   const [panelPositions, setPanelPositions] = useState<Record<string, PanelPos>>(loadPositions);
   const [, setCredits] = useState("");
-  const [estimate, setEstimate] = useState<BackendEstimate | null>(null);
-
-  useEffect(() => {
-    const stored = sessionStorage.getItem("latest-estimate");
-    if (!stored) return;
-    try {
-      setEstimate(JSON.parse(stored));
-    } catch {
-      /* ignore malformed cache */
-    }
-  }, []);
 
   /* -- Aerial View state -- */
   const [aerialState, setAerialState] = useState<
@@ -139,7 +141,7 @@ export default function EstimatorPage() {
   const [showAerialModal, setShowAerialModal] = useState(false);
 
   const handleAerialClick = useCallback(async () => {
-    if (!estimate?.address) return;
+    if (!address) return;
 
     if (aerialVideoUrl) {
       setShowAerialModal(true);
@@ -148,7 +150,7 @@ export default function EstimatorPage() {
 
     setAerialState("loading");
     try {
-      const result = await fetchAerialVideo(estimate.address);
+      const result = await fetchAerialVideo(address);
       const url =
         result.uris?.MP4_HIGH?.landscapeUri
         ?? result.uris?.MP4_MEDIUM?.landscapeUri
@@ -166,7 +168,7 @@ export default function EstimatorPage() {
       console.error("Aerial fetch failed:", e);
       setAerialState("error");
     }
-  }, [estimate?.address, aerialVideoUrl]);
+  }, [address, aerialVideoUrl]);
 
   const panelDragRef = useRef<{ active: boolean; panelId: string; offsetX: number; offsetY: number }>({ active: false, panelId: "", offsetX: 0, offsetY: 0 });
 
@@ -194,36 +196,95 @@ export default function EstimatorPage() {
     return () => { window.removeEventListener("mousemove", handleMove); window.removeEventListener("mouseup", handleUp); };
   }, [editLayout]);
 
-  const handleSelectSegment = useCallback((_segment: RoofSegmentStat | null, index: number) => {
-    if (index < 0) clearSegmentSelection();
-    else toggleSegmentSelection(index);
-  }, [toggleSegmentSelection, clearSegmentSelection]);
+  const handleSelectSegment = useCallback((_segment: RoofSegment | null, index: number) => {
+    setSelectedSegmentIndex(index);
+  }, [setSelectedSegmentIndex]);
 
-  const sp = buildingInsights?.solarPotential;
-  const totalAreaFt2 = sp ? m2ToFt2(sp.wholeRoofStats.areaMeters2) : 0;
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!estimateId || modelStatus === "completed" || modelStatus === "failed" || modelStatus === "idle") return;
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const status = await pollModelStatus(estimateId);
+        setModelStatus(status.status);
+        if (status.status === "completed") {
+          setModelUrl(getModelUrl(estimateId));
+          toast.success("3D model ready", { description: "Switch to 3D view to see your roof model." });
+          if (pollRef.current) clearInterval(pollRef.current);
+        } else if (status.status === "failed") {
+          setModelError(status.error ?? "Generation failed");
+          if (pollRef.current) clearInterval(pollRef.current);
+        }
+      } catch {
+        setModelError("Failed to check status");
+        setModelStatus("failed");
+        if (pollRef.current) clearInterval(pollRef.current);
+      }
+    }, 3000);
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [estimateId, modelStatus, setModelStatus, setModelUrl, setModelError]);
+
+  const bi = buildingInsights;
+  const totalAreaFt2 = bi?.total_roof_area_sq_ft ?? 0;
 
   return (
     <div className="fixed inset-0 font-sans text-ink overflow-hidden select-none" style={{ background: "linear-gradient(160deg, #1a2440 0%, #0e1830 100%)" }}>
 
-      {/* 3D Canvas / Top-down */}
+      {/* Canvas — 3D model (perspective) or Google 3D Tiles (satellite/topdown) */}
       <div className="absolute inset-0 z-0">
-        {mode === "topdown" ? (
+        {mode === "perspective" ? (
+          modelStatus === "completed" && modelUrl ? (
+            <ModelViewer modelUrl={modelUrl} />
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center gap-3">
+              {(modelStatus === "pending" || modelStatus === "capturing" || modelStatus === "generating") && (
+                <>
+                  <div className="w-8 h-8 border-2 border-blue border-t-transparent rounded-full animate-spin" />
+                  <span className="text-[13px] font-mono text-white/60">
+                    {modelStatus === "pending" && "Starting 3D model..."}
+                    {modelStatus === "capturing" && "Capturing building images..."}
+                    {modelStatus === "generating" && "Generating 3D model..."}
+                  </span>
+                </>
+              )}
+              {modelStatus === "failed" && (
+                <span className="text-[13px] font-mono text-red-400">
+                  {modelError ?? "3D model generation failed"}
+                </span>
+              )}
+              {modelStatus === "idle" && (
+                <span className="text-[13px] font-mono text-white/40">
+                  No 3D model available
+                </span>
+              )}
+            </div>
+          )
+        ) : mode === "topdown" ? (
           <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: "#0e1830" }}>
             {segments.length > 0 ? (
               <RoofBlueprint
-                segments={segments.map((seg, i): BlueprintSegment => ({
-                  id: i,
-                  pitch_degrees: seg.pitchDegrees ?? null,
-                  azimuth_degrees: seg.azimuthDegrees ?? null,
-                  area_sq_ft: m2ToFt2(seg.stats.areaMeters2),
-                  bounding_box: seg.boundingBox,
-                  center: seg.center,
-                }))}
+                segments={segments
+                  .filter((seg) => seg.bounding_box != null)
+                  .map((seg): BlueprintSegment => ({
+                    id: seg.id,
+                    pitch_degrees: seg.pitch_degrees,
+                    azimuth_degrees: seg.azimuth_degrees,
+                    area_sq_ft: seg.area_sq_ft,
+                    bounding_box: seg.bounding_box!,
+                    center: seg.center ?? undefined,
+                  }))}
                 width={820}
                 height={600}
                 dark
-                selectedSegmentIds={selectedSegmentIndices}
-                onSegmentClick={(seg) => toggleSegmentSelection(seg.id)}
+                selectedSegmentIds={selectedSegmentIndex >= 0 ? [selectedSegmentIndex] : []}
+                onSegmentClick={(seg) =>
+                  setSelectedSegmentIndex(seg.id === selectedSegmentIndex ? -1 : seg.id)
+                }
                 style={{ display: "block", width: "min(680px, 70vw, 70vh * 1.367)" }}
               />
             ) : (
@@ -231,47 +292,48 @@ export default function EstimatorPage() {
             )}
           </div>
         ) : (
-          <Scene
-            key={`${mode}-${buildingInsights?.center.latitude ?? location?.lat ?? 0},${buildingInsights?.center.longitude ?? location?.lng ?? 0}`}
-            location={location}
-            buildingInsights={buildingInsights}
-            selectedIndex={primarySegmentIndex}
-            onSelectSegment={handleSelectSegment}
-            onCreditsUpdate={setCredits}
-            topDown={false}
-          />
+          <Scene location={location} buildingInsights={buildingInsights} selectedIndex={selectedSegmentIndex} onSelectSegment={handleSelectSegment} onCreditsUpdate={setCredits} />
         )}
       </div>
 
-      {/* ============================================================ */}
-      {/*  1. Top nav                                                   */}
-      {/* ============================================================ */}
-      <div className="absolute top-5 left-1/2 -translate-x-1/2 z-40">
-        <nav className="flex items-center gap-4 py-3 pl-5 pr-3.5 bg-white/10 backdrop-blur-2xl rounded-[18px] shadow-[0_1px_0_rgba(255,255,255,0.10)_inset,0_8px_26px_rgba(0,0,0,0.25),0_0_0_1px_rgba(255,255,255,0.10)]">
-          {/* Brand */}
-          <BrandMark size={30} />
-          <div className="flex flex-col gap-px px-1">
-            <span className="text-[13px] font-semibold text-white tracking-tight">
-              Re-roof estimate
-            </span>
-            <span className="text-[9.5px] font-mono text-white/45 tracking-wider">
-              {estimate?.estimate_id
-                ? `EST-${estimate.estimate_id.slice(0, 8).toUpperCase()} · Draft`
-                : "EST-2418 · Draft"}
-            </span>
-          </div>
-
-          {/* Divider */}
-          <div className="w-px h-6.5 bg-white/12" />
-
-          {/* Property meta */}
-          <div className="flex flex-col gap-px px-1">
-            <span className="text-[9.5px] font-mono text-white/45 tracking-wider uppercase">
-              PROPERTY
-            </span>
-            <span className="text-xs font-semibold text-white font-mono truncate max-w-[280px]">
-              {estimate?.address ?? "412 W Holloway Ave · Tampa, FL"}
-            </span>
+      {/* Top nav */}
+      <div className="absolute top-5 left-1/2 -translate-x-1/2 z-40 max-w-[calc(100vw-48px)]">
+        <nav className="flex flex-row items-center justify-between py-3 pl-5 pr-3.5 bg-white/10 backdrop-blur-md rounded-[18px] shadow-[0_1px_0_rgba(255,255,255,0.10)_inset,0_8px_26px_rgba(0,0,0,0.25),0_0_0_1px_rgba(255,255,255,0.10)]" style={{ width: 1240 }}>
+          <div className="flex items-center gap-4 shrink-0">
+            <BrandMark size={30} />
+            <div className="flex flex-col gap-px px-1">
+              <span className="text-[13px] font-semibold text-white tracking-tight">Roof Estimate</span>
+              <span className="text-[9.5px] font-mono text-white/45 tracking-wider">{estimateId ? `${estimateId.slice(0, 8).toUpperCase()} · Draft` : "Draft"}</span>
+            </div>
+            <div className="w-px h-6.5 bg-white/12" />
+            {address ? (() => {
+              const parsed = parseAddress(address);
+              return (
+                <div className="flex items-center gap-3 px-1">
+                  <div className="flex flex-col gap-px">
+                    <span className="text-[9.5px] font-mono text-white/45 tracking-wider uppercase">STREET</span>
+                    <span className="text-xs font-semibold text-white font-mono">{parsed.street}</span>
+                  </div>
+                  {parsed.city && (
+                    <div className="flex flex-col gap-px">
+                      <span className="text-[9.5px] font-mono text-white/45 tracking-wider uppercase">CITY</span>
+                      <span className="text-xs font-semibold text-white font-mono">{parsed.city}</span>
+                    </div>
+                  )}
+                  {parsed.stateZip && (
+                    <div className="flex flex-col gap-px">
+                      <span className="text-[9.5px] font-mono text-white/45 tracking-wider uppercase">STATE / ZIP</span>
+                      <span className="text-xs font-semibold text-white font-mono">{parsed.stateZip}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })() : (
+              <div className="flex flex-col gap-px px-1">
+                <span className="text-[9.5px] font-mono text-white/45 tracking-wider uppercase">PROPERTY</span>
+                <span className="text-xs font-semibold text-white font-mono">No address selected</span>
+              </div>
+            )}
           </div>
 
           {/* Divider */}
@@ -280,8 +342,10 @@ export default function EstimatorPage() {
           {/* Step crumbs */}
           <div className="flex items-center gap-1">
             {STEPS.map((step) => (
-              <button key={step.n} onClick={() => step.path !== "/estimator" && navigate(step.path)}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-mono font-semibold transition-colors cursor-pointer border-none hover:bg-white/10 ${step.status === "current" ? "bg-blue/25 text-blue-bright" : step.status === "done" ? "bg-transparent text-white/80" : "bg-transparent text-white/45"}`}>
+              <button key={step.n}
+                onClick={() => step.status !== "todo" && step.path !== "/estimator" && navigate(step.path)}
+                disabled={step.status === "todo"}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-mono font-semibold transition-colors border-none ${step.status === "todo" ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-white/10"} ${step.status === "current" ? "bg-blue/25 text-white" : "bg-transparent text-white"}`}>
                 {step.status === "done" ? (
                   <span className="material-symbols-rounded text-[16px] text-green">check_circle</span>
                 ) : (
@@ -315,9 +379,16 @@ export default function EstimatorPage() {
           <span className="text-[9.5px] font-mono text-muted tracking-wider uppercase">ROOF SPEC · LIVE</span>
         </div>
         <div className="text-[13px] font-semibold mb-2 break-words leading-tight">
-          {estimate?.address ?? "412 W Holloway Ave"}
+          {address ?? "No address selected"}
         </div>
-        {estimate?.address && (
+        {satelliteImageUrl && (
+          <img
+            src={satelliteImageUrl}
+            alt="Satellite view of property"
+            className="w-full rounded-lg border border-hair mb-3"
+          />
+        )}
+        {address && (
           <button
             onClick={handleAerialClick}
             disabled={aerialState === "loading"}
@@ -330,19 +401,19 @@ export default function EstimatorPage() {
           </button>
         )}
         <div className="text-[10.5px] font-mono text-muted mb-4">
-          {estimate?.solar?.total_roof_area_sq_ft != null
-            ? `${Math.round(estimate.solar.total_roof_area_sq_ft).toLocaleString()} sq ft · ${estimate.solar.segments?.length ?? 0} faces`
-            : "Parcel 191724-A · Hillsborough County"}
+          {bi
+            ? `${Math.round(bi.total_roof_area_sq_ft).toLocaleString()} sq ft · ${bi.segments.length} faces`
+            : "Loading building data..."}
         </div>
 
-        {sp ? (
+        {bi ? (
           <>
             <div className="grid grid-cols-2 gap-2 mb-4">
               {[
-                { label: "Roof area", value: `${m2ToFt2(sp.wholeRoofStats.areaMeters2).toLocaleString(undefined, { maximumFractionDigits: 0 })} sf` },
-                { label: "Ground area", value: `${m2ToFt2(sp.wholeRoofStats.groundAreaMeters2).toLocaleString(undefined, { maximumFractionDigits: 0 })} sf` },
-                { label: "Max panels", value: sp.maxArrayPanelsCount.toString() },
-                { label: "Peak sun", value: `${sp.maxSunshineHoursPerYear.toFixed(0)} hrs/yr` },
+                { label: "Roof area", value: `${Math.round(bi.total_roof_area_sq_ft).toLocaleString()} sf` },
+                { label: "Segments", value: bi.segments.length.toString() },
+                { label: "Imagery", value: bi.imagery_quality ?? "—" },
+                { label: "Ground area", value: `${Math.round(bi.segments.reduce((s, seg) => s + seg.ground_area_sq_ft, 0)).toLocaleString()} sf` },
               ].map((stat) => (
                 <div key={stat.label} className="bg-paper-2 border border-hair rounded-lg px-3 py-2.5">
                   <div className="text-[9px] font-mono text-muted-2 uppercase tracking-wider mb-0.5">{stat.label}</div>
@@ -353,21 +424,20 @@ export default function EstimatorPage() {
             <div className="w-full h-px bg-hair mb-3" />
             <div className="flex items-center justify-between mb-2">
               <span className="text-[9.5px] font-mono text-muted tracking-wider uppercase">{selectedSegment ? "SELECTED SEGMENT" : "NO SEGMENT SELECTED"}</span>
-              {selectedSegment && (
+              {selectedSegment && selectedSegment.azimuth_degrees != null && (
                 <span className="text-[9.5px] font-mono bg-blue-soft text-blue px-2 py-0.5 rounded-full font-semibold">
-                  {selectedSegment.azimuthDegrees.toFixed(0)}° {azimuthToCompass(selectedSegment.azimuthDegrees)}
+                  {selectedSegment.azimuth_degrees.toFixed(0)}° {azimuthToCompass(selectedSegment.azimuth_degrees)}
                 </span>
               )}
             </div>
             {selectedSegment ? (
               <div className="space-y-1.5">
                 {[
-                  { k: "Area", v: `${m2ToFt2(selectedSegment.stats.areaMeters2).toLocaleString(undefined, { maximumFractionDigits: 0 })} sf` },
-                  { k: "Ground area", v: `${m2ToFt2(selectedSegment.stats.groundAreaMeters2).toLocaleString(undefined, { maximumFractionDigits: 0 })} sf` },
-                  { k: "Pitch", v: `${selectedSegment.pitchDegrees.toFixed(1)}°` },
-                  { k: "Azimuth", v: `${selectedSegment.azimuthDegrees.toFixed(0)}° ${azimuthToCompass(selectedSegment.azimuthDegrees)}` },
-                  { k: "Height at center", v: `${(selectedSegment.planeHeightAtCenterMeters * 3.28084).toFixed(1)} ft` },
-                  { k: "Median sunshine", v: `${(selectedSegment.stats.sunshineQuantiles[Math.floor(selectedSegment.stats.sunshineQuantiles.length / 2)] ?? 0).toFixed(0)} hrs/yr` },
+                  { k: "Area", v: `${Math.round(selectedSegment.area_sq_ft).toLocaleString()} sf` },
+                  { k: "Ground area", v: `${Math.round(selectedSegment.ground_area_sq_ft).toLocaleString()} sf` },
+                  { k: "Pitch", v: selectedSegment.pitch_degrees != null ? `${selectedSegment.pitch_degrees.toFixed(1)}°` : "—" },
+                  { k: "Azimuth", v: selectedSegment.azimuth_degrees != null ? `${selectedSegment.azimuth_degrees.toFixed(0)}° ${azimuthToCompass(selectedSegment.azimuth_degrees)}` : "—" },
+                  { k: "Height at center", v: selectedSegment.plane_height_meters != null ? `${(selectedSegment.plane_height_meters * 3.28084).toFixed(1)} ft` : "—" },
                 ].map((row) => (
                   <div key={row.k} className="flex items-center justify-between py-0.5">
                     <span className="text-[10.5px] text-muted font-mono">{row.k}</span>
@@ -390,36 +460,26 @@ export default function EstimatorPage() {
           <span className="text-[9.5px] font-mono text-muted tracking-wider uppercase">SEGMENTS · {segments.length}</span>
         </div>
         <div className="text-[11px] text-muted mb-1">Roof segments</div>
-        {sp && (
-          <div className="text-[13px] font-semibold font-mono mb-1">
-            {totalAreaFt2.toLocaleString(undefined, { maximumFractionDigits: 0 })} sf
+        {bi && (
+          <div className="text-[13px] font-semibold font-mono mb-3">
+            {Math.round(totalAreaFt2).toLocaleString()} sf
             <span className="text-muted-2 font-normal text-[11px] ml-1">total roof</span>
           </div>
         )}
-        {selectedSegmentIndices.length > 0 && (
-          <div className="text-[13px] font-semibold font-mono mb-3 text-blue">
-            {selectedAreaFt2.toLocaleString(undefined, { maximumFractionDigits: 0 })} sf
-            <span className="text-muted-2 font-normal text-[11px] ml-1">
-              selected · {selectedSegmentIndices.length} segment{selectedSegmentIndices.length === 1 ? "" : "s"}
-            </span>
-          </div>
-        )}
-        {selectedSegmentIndices.length === 0 && sp && <div className="mb-2" />}
         {segments.length > 0 ? (
           <div className="space-y-0.5 max-h-[400px] overflow-y-auto">
             {segments.map((seg, i) => {
-              const isSel = selectedSegmentIndices.includes(i);
-              const areaFt = m2ToFt2(seg.stats.areaMeters2);
+              const isSel = i === selectedSegmentIndex;
               return (
-                <button key={i} onClick={() => toggleSegmentSelection(i)}
+                <button key={i} onClick={() => setSelectedSegmentIndex(isSel ? -1 : i)}
                   className={`w-full flex items-center gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer transition-colors border-none text-left font-sans ${isSel ? "bg-blue-soft" : "bg-transparent hover:bg-hair/40"}`}>
                   <div className={`w-3.5 h-3.5 rounded-sm border-2 flex items-center justify-center ${isSel ? "border-blue bg-blue" : "border-hair"}`}>
                     {isSel && <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4L3 5.5L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                   </div>
                   <span className="flex-1 text-[12px] font-medium">
-                    Segment {i + 1}<span className="text-[10px] text-muted ml-1.5">{azimuthToCompass(seg.azimuthDegrees)}-facing</span>
+                    Segment {i + 1}<span className="text-[10px] text-muted ml-1.5">{seg.azimuth_degrees != null ? `${azimuthToCompass(seg.azimuth_degrees)}-facing` : ""}</span>
                   </span>
-                  <span className="text-[11px] font-mono text-muted">{areaFt.toLocaleString(undefined, { maximumFractionDigits: 0 })} sf</span>
+                  <span className="text-[11px] font-mono text-muted">{Math.round(seg.area_sq_ft).toLocaleString()} sf</span>
                 </button>
               );
             })}
@@ -430,7 +490,7 @@ export default function EstimatorPage() {
       </GlassPanel>
 
       {/* Material picker */}
-      <GlassPanel id="materials" editLayout={editLayout} positions={panelPositions} onDragStart={handlePanelDragStart} className="bg-white/88 text-ink p-4" style={{ right: 20, bottom: 90, width: 290, zIndex: 30 }}>
+      <GlassPanel id="materials" editLayout={editLayout} positions={panelPositions} onDragStart={handlePanelDragStart} className="bg-white/88 text-ink p-4" style={{ top: 90, right: 320, width: 290, zIndex: 30 }}>
         <div className="text-[9.5px] font-mono text-muted tracking-wider uppercase mb-2.5">Quick materials</div>
         <div className="flex gap-1 mb-3">
           {(["shingle", "metal", "membrane"] as const).map((tab) => (
@@ -455,36 +515,36 @@ export default function EstimatorPage() {
       </GlassPanel>
 
       {/* Tool palette */}
-      <div className="absolute z-40 flex items-center gap-1 py-2 px-3 bg-white/10 backdrop-blur-2xl rounded-[14px] shadow-[0_1px_0_rgba(255,255,255,0.10)_inset,0_8px_26px_rgba(0,0,0,0.25),0_0_0_1px_rgba(255,255,255,0.10)]" style={{ bottom: 80, left: "50%", transform: "translateX(-50%)" }}>
+      <div className="absolute z-40 flex items-center gap-1 py-2 px-3 bg-[#1a2440]/85 rounded-[14px] shadow-[0_1px_0_rgba(255,255,255,0.10)_inset,0_8px_26px_rgba(0,0,0,0.25),0_0_0_1px_rgba(255,255,255,0.10)]" style={{ bottom: 80, left: "50%", transform: "translateX(-50%)" }}>
         {TOOLS.map((tool) => (
           <button key={tool.id} onClick={() => setActiveTool(tool.id)} title={tool.label}
-            className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg text-[11px] font-mono border-none cursor-pointer transition-colors ${activeTool === tool.id ? "bg-white/20 text-white" : "bg-transparent text-white/55 hover:text-white/80 hover:bg-white/8"}`}>
+            className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg text-[11px] font-mono border-none cursor-pointer transition-colors ${activeTool === tool.id ? "bg-white/20 text-white" : "bg-transparent text-white hover:bg-white/8"}`}>
             <span className="text-[16px] leading-none">{tool.icon}</span>
             <span className="text-[9px]">{tool.label}</span>
           </button>
         ))}
         <div className="w-px h-8 bg-white/12 mx-1" />
-        <button title="Undo" className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg text-[11px] font-mono border-none cursor-pointer bg-transparent text-white/55 hover:text-white/80 hover:bg-white/8 transition-colors">
+        <button title="Undo" className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg text-[11px] font-mono border-none cursor-pointer bg-transparent text-white hover:bg-white/8 transition-colors">
           <span className="text-[16px] leading-none">↩</span>
           <span className="text-[9px]">Undo</span>
         </button>
-        <button onClick={() => clearSegmentSelection()} title="Deselect" className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg text-[11px] font-mono border-none cursor-pointer bg-transparent text-white/55 hover:text-white/80 hover:bg-white/8 transition-colors">
+        <button onClick={() => setSelectedSegmentIndex(-1)} title="Deselect" className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg text-[11px] font-mono border-none cursor-pointer bg-transparent text-white hover:bg-white/8 transition-colors">
           <span className="text-[16px] leading-none">⟲</span>
           <span className="text-[9px]">Reset</span>
         </button>
         <div className="w-px h-8 bg-white/12 mx-1" />
         <button onClick={() => setEditLayout((v) => !v)}
-          className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg text-[11px] font-mono border-none cursor-pointer transition-colors ${editLayout ? "bg-blue/30 text-blue-bright" : "bg-transparent text-white/55 hover:text-white/80 hover:bg-white/8"}`}>
+          className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg text-[11px] font-mono border-none cursor-pointer transition-colors ${editLayout ? "bg-blue/30 text-blue-bright" : "bg-transparent text-white hover:bg-white/8"}`}>
           <span className="text-[16px] leading-none">⊞</span>
           <span className="text-[9px]">Layout</span>
         </button>
       </div>
 
       {/* Mode bar */}
-      <div className="absolute z-40 flex items-center gap-1 p-1 bg-white/10 backdrop-blur-2xl rounded-full shadow-[0_0_0_1px_rgba(255,255,255,0.10)]" style={{ bottom: 24, left: "50%", transform: "translateX(-50%)" }}>
+      <div className="absolute z-40 flex items-center gap-1 p-1 bg-[#1a2440]/85 rounded-full shadow-[0_0_0_1px_rgba(255,255,255,0.10)]" style={{ bottom: 24, left: "50%", transform: "translateX(-50%)" }}>
         {(["perspective", "satellite", "topdown"] as const).map((m) => (
           <button key={m} onClick={() => setMode(m)}
-            className={`px-4 py-1.5 rounded-full text-[11px] font-semibold font-mono border-none cursor-pointer transition-colors ${mode === m ? "bg-white text-ink shadow-[0_2px_8px_rgba(0,0,0,0.12)]" : "bg-transparent text-white/60 hover:text-white/85"}`}>
+            className={`px-4 py-1.5 rounded-full text-[11px] font-semibold font-mono border-none cursor-pointer transition-colors ${mode === m ? "bg-white text-ink shadow-[0_2px_8px_rgba(0,0,0,0.12)]" : "bg-transparent text-white hover:bg-white/10"}`}>
             {m === "topdown" ? "Top-down" : m === "perspective" ? "3D" : "Satellite"}
           </button>
         ))}
@@ -493,19 +553,7 @@ export default function EstimatorPage() {
       {/* ============================================================ */}
       {/*  7. Ask Crew FAB                                              */}
       {/* ============================================================ */}
-      <button
-        className="absolute z-40 flex items-center gap-2 py-2.5 px-4 rounded-xl border-none cursor-pointer text-white text-[12.5px] font-semibold font-sans shadow-[0_4px_20px_rgba(56,104,198,0.35)]"
-        style={{
-          right: 20,
-          bottom: 24,
-          background: "linear-gradient(135deg, #4C85E5 0%, #3868C6 100%)",
-        }}
-      >
-        Ask Crew
-        <kbd className="font-mono text-[10px] text-white/70 bg-white/15 py-0.5 px-1.5 rounded ml-1">
-          ⌘K
-        </kbd>
-      </button>
+      <CrewChat />
 
       {/* ============================================================ */}
       {/*  Aerial View modal                                            */}

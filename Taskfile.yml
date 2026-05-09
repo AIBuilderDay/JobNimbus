@@ -1,11 +1,28 @@
 version: "3"
 
+includes:
+  env:
+    taskfile: ./tasks/env.yml
+    dir: .
+
 tasks:
+  default:
+    desc: "Show available tasks"
+    silent: true
+    cmds:
+      - task --list
+
   backend:dev:
-    desc: Run backend dev server locally with secrets injected from 1Password
+    desc: Build, start, and tail logs for backend container
+    deps: [backend:up]
+    cmds:
+      - docker logs -f jobnimbus-backend
+
+  backend:test:
+    desc: Run backend tests
     dir: backend
     cmds:
-      - op run --env-file=.env -- uv run fastapi dev main.py
+      - uv run pytest tests/ -v
 
   frontend:dev:
     desc: Run frontend Vite dev server with secrets injected from 1Password
@@ -20,12 +37,32 @@ tasks:
       - docker build -t jobnimbus-backend .
 
   backend:up:
-    desc: Start backend container
-    deps: [backend:build]
+    desc: Build and start backend container with env vars from .env
+    dir: backend
     cmds:
-      - docker run --rm -p 8000:8000 --name jobnimbus-backend jobnimbus-backend
+      - docker stop jobnimbus-backend 2>/dev/null || true
+      - docker rm jobnimbus-backend 2>/dev/null || true
+      - docker build --no-cache -t jobnimbus-backend .
+      - docker run -d -p 8000:8000 --env-file .env --name jobnimbus-backend jobnimbus-backend
 
   backend:down:
     desc: Stop backend container
     cmds:
       - docker stop jobnimbus-backend
+
+  backend:logs:
+    desc: Tail logs from running backend container
+    cmds:
+      - docker logs -f jobnimbus-backend
+
+  backend:shell:
+    desc: Exec into running backend container
+    cmds:
+      - docker exec -it jobnimbus-backend /bin/sh
+
+  backend:env-check:
+    desc: Print loaded settings (secrets redacted) — sanity check
+    dir: backend
+    cmds:
+      - |
+        op run --env-file=.env -- uv run python -c "from settings import settings; print({k: ('***' if any(s in k for s in ['KEY','TOKEN','SECRET']) else v) for k,v in settings.model_dump().items()})"

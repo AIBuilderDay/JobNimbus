@@ -1,11 +1,14 @@
-import httpx
 from urllib.parse import urlencode
 
-from config import get_google_maps_api_key
+import httpx
+
+from logger import get_logger
+from settings import settings
+
+log = get_logger(__name__)
 
 SOLAR_API_BASE = "https://solar.googleapis.com/v1"
 SQM_TO_SQFT = 10.7639
-FRONTEND_REFERER = "http://localhost:5173"
 
 
 async def get_solar_data(lat: float, lng: float) -> dict | None:
@@ -14,10 +17,17 @@ async def get_solar_data(lat: float, lng: float) -> dict | None:
     Tries HIGH quality first, falls back to MEDIUM. Some addresses have MEDIUM imagery
     only — without the fallback we'd silently miss them.
     """
+    log.info("fetching solar data for lat=%s lng=%s", lat, lng)
     for quality in ("HIGH", "MEDIUM"):
         raw = await _fetch(lat, lng, quality)
         if raw is not None:
-            return _parse(raw)
+            parsed = _parse(raw)
+            log.info(
+                "solar fetched lat=%s lng=%s quality=%s segments=%d total_area_sqft=%.1f",
+                lat, lng, quality, len(parsed["segments"]), parsed["total_roof_area_sq_ft"],
+            )
+            return parsed
+    log.info("no solar coverage for lat=%s lng=%s", lat, lng)
     return None
 
 
@@ -26,17 +36,26 @@ async def _fetch(lat: float, lng: float, quality: str) -> dict | None:
         "location.latitude": lat,
         "location.longitude": lng,
         "requiredQuality": quality,
-        "key": get_google_maps_api_key(),
+        "key": settings.GOOGLE_MAPS_API_KEY,
     })
     url = f"{SOLAR_API_BASE}/buildingInsights:findClosest?{params}"
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(url, headers={"Referer": FRONTEND_REFERER})
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, headers={"Referer": FRONTEND_REFERER})
+    except httpx.HTTPError:
+        log.exception("solar request failed for lat=%s lng=%s quality=%s", lat, lng, quality)
+        raise
 
     if resp.status_code == 404:
+        log.info("solar 404 (no coverage) for lat=%s lng=%s quality=%s", lat, lng, quality)
         return None
 
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPError:
+        log.exception("solar non-2xx for lat=%s lng=%s quality=%s status=%s", lat, lng, quality, resp.status_code)
+        raise
     return resp.json()
 
 

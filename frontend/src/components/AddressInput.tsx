@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { geocode } from "../api/geocode";
-import { fetchBuildingInsights } from "../api/solar";
+import { startEstimate } from "../api/estimate";
 import type { BuildingInsightsResponse } from "../types/solar";
 
 const SAMPLE_ADDRESSES = [
@@ -35,9 +34,11 @@ export default function AddressInput({
     onLoadingChange(true);
 
     try {
-      const loc = await geocode(trimmed);
-      const data = await fetchBuildingInsights(loc.lat, loc.lng);
-      onResult(loc, data);
+      const result = await startEstimate(trimmed);
+      if (!result.buildingInsights) {
+        throw new Error("No solar data available for this building.");
+      }
+      onResult(result.location, result.buildingInsights);
     } catch (err) {
       onError(err instanceof Error ? err.message : "An error occurred.");
     } finally {

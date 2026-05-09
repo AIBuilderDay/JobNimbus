@@ -3,11 +3,12 @@ import { Link, useNavigate } from "react-router-dom";
 import DarkLayout from "../components/layout/DarkLayout";
 import GlassNav from "../components/ui/GlassNav";
 import BrandMark from "../components/ui/BrandMark";
+import Scene from "../components/Scene";
 import { useProperties } from "../hooks/useEstimates";
-// import { geocode } from "../api/geocode";
-import { fetchBuildingInsights } from "../api/solar";
+import { startEstimate } from "../api/estimate";
+import { captureImages, confirmGeneration, pollModelStatus, getModelUrl } from "../api/model3d";
 import { useEstimatorStore } from "../store/estimatorStore";
-import { startEstimate } from "../api/estimates";
+import { toast } from "sonner";
 import type { Property } from "../types/estimate";
 
 /* ------------------------------------------------------------------ */
@@ -16,10 +17,9 @@ import type { Property } from "../types/estimate";
 
 const navSteps = [
   { num: 1, label: "Address", active: true, path: "/address" },
-  { num: 2, label: "Capture", active: false, path: "/estimator" },
-  { num: 3, label: "Faces", active: false, path: "/estimator" },
-  { num: 4, label: "Materials", active: false, path: "/pricing" },
-  { num: 5, label: "Proposal", active: false, path: "/proposal" },
+  { num: 2, label: "Materials", active: false, path: "/estimator" },
+  { num: 3, label: "Proposal", active: false, path: "/proposal" },
+  { num: 4, label: "Finalize", active: false, path: "/finalization" },
 ];
 
 function StepDots() {
@@ -29,8 +29,9 @@ function StepDots() {
       {navSteps.map((step, i) => (
         <button
           key={step.num}
-          onClick={() => nav(step.path)}
-          className="flex items-center gap-2 bg-transparent border-none cursor-pointer p-0"
+          onClick={() => step.active && nav(step.path)}
+          disabled={!step.active}
+          className={`flex items-center gap-2 bg-transparent border-none p-0 ${step.active ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}
         >
           {i > 0 && <div className="w-4 h-px bg-white/12" />}
           <div
@@ -85,67 +86,104 @@ function PinIcon() {
 /*  Loading overlay                                                    */
 /* ------------------------------------------------------------------ */
 
-const loadingSteps = [
-  "Locking imagery...",
-  "Snapping to parcel boundary...",
-  "Detecting roof planes...",
-  "Generating 3D model...",
-  "Opening estimator...",
-];
+const STATUS_LABELS: Record<string, string> = {
+  starting: "Starting estimate...",
+  pending: "Queuing 3D model...",
+  capturing: "Capturing building images...",
+  generating: "Generating 3D model...",
+  completed: "Opening estimator...",
+};
 
-function LoadingOverlay({ onComplete }: { onComplete: () => void }) {
-  const [stepIndex, setStepIndex] = useState(0);
-
-  useEffect(() => {
-    if (stepIndex < loadingSteps.length - 1) {
-      const timer = setTimeout(() => setStepIndex((i) => i + 1), 1200);
-      return () => clearTimeout(timer);
-    } else {
-      const timer = setTimeout(onComplete, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [stepIndex, onComplete]);
-
-  const progress = ((stepIndex + 1) / loadingSteps.length) * 100;
-
+function LoadingSpinner({ status }: { status: string }) {
+  const label = STATUS_LABELS[status] ?? "Loading...";
   return (
     <div className="fixed inset-0 z-[999] bg-[#0e1830] flex flex-col items-center justify-center">
-      {/* radial glow */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(76,133,229,0.15),transparent_60%)]" />
+      <div className="relative z-10 flex flex-col items-center gap-5">
+        <div className="w-10 h-10 border-[3px] border-blue-bright border-t-transparent rounded-full animate-spin" />
+        <p className="text-[14px] font-medium text-white">{label}</p>
+      </div>
+    </div>
+  );
+}
 
-      {/* scan animation */}
-      <div className="relative w-20 h-20 mb-10">
-        <div className="absolute inset-0 rounded-2xl border border-blue-bright/30" />
-        <div className="absolute inset-2 rounded-xl border border-blue-bright/20" />
-        {/* scanning line */}
-        <div className="absolute left-2 right-2 h-px bg-blue-bright/80 shadow-[0_0_12px_rgba(76,133,229,0.6)] animate-[scan_2s_ease-in-out_infinite]" />
-        {/* house icon in center */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <BrandMark size={32} />
+function ImageReviewOverlay({
+  images,
+  onConfirm,
+  onCancel,
+}: {
+  images: string[];
+  onConfirm: (selectedIndices: number[]) => void;
+  onCancel: () => void;
+}) {
+  const [selected, setSelected] = useState<Set<number>>(() => new Set(images.map((_, i) => i)));
+
+  const toggle = (i: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[999] bg-[#0e1830] flex flex-col items-center justify-center p-8">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(76,133,229,0.15),transparent_60%)]" />
+      <div className="relative z-10 flex flex-col items-center gap-6 max-w-[900px] w-full">
+        <div className="text-center">
+          <h2 className="text-[22px] font-semibold text-white mb-2">Review Captured Images</h2>
+          <p className="text-[13px] text-white/50">
+            These images will be sent to generate the 3D model. Deselect any that don't show the building.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 w-full max-h-[60vh] overflow-y-auto p-1">
+          {images.map((b64, i) => (
+            <button
+              key={i}
+              onClick={() => toggle(i)}
+              className={`relative rounded-xl overflow-hidden border-2 transition-all cursor-pointer bg-transparent p-0 ${
+                selected.has(i)
+                  ? "border-blue-bright shadow-[0_0_12px_rgba(76,133,229,0.4)]"
+                  : "border-white/10 opacity-40"
+              }`}
+            >
+              <img
+                src={`data:image/jpeg;base64,${b64}`}
+                alt={`Captured view ${i + 1}`}
+                className="w-full aspect-square object-cover"
+              />
+              <div className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center text-[14px] ${
+                selected.has(i) ? "bg-blue-bright text-white" : "bg-black/50 text-white/40"
+              }`}>
+                {selected.has(i) ? "✓" : ""}
+              </div>
+              <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-1">
+                <span className="text-[10px] font-mono text-white/70">
+                  {i < images.length - 1 ? `Street View ${i + 1}` : "Satellite"}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onCancel}
+            className="px-5 py-2.5 rounded-xl border border-white/20 bg-transparent text-white/70 text-[13px] font-semibold cursor-pointer hover:bg-white/5 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onConfirm(Array.from(selected).sort())}
+            disabled={selected.size === 0}
+            className="px-5 py-2.5 rounded-xl border-none bg-blue-bright text-white text-[13px] font-semibold cursor-pointer hover:opacity-90 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            Generate with {selected.size} image{selected.size !== 1 ? "s" : ""}
+          </button>
         </div>
       </div>
-
-      <div className="relative z-10 text-center">
-        <p className="text-[14px] font-medium text-white mb-3">{loadingSteps[stepIndex]}</p>
-        {/* progress bar */}
-        <div className="w-48 h-1 bg-white/10 rounded-full overflow-hidden mx-auto mb-4">
-          <div
-            className="h-full bg-blue-bright rounded-full transition-all duration-700 ease-out"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-        <p className="text-[11px] font-mono text-white/40 uppercase tracking-wider">
-          Step {stepIndex + 1} of {loadingSteps.length}
-        </p>
-      </div>
-
-      {/* inline keyframes for scan animation */}
-      <style>{`
-        @keyframes scan {
-          0%, 100% { top: 8px; }
-          50% { top: calc(100% - 8px); }
-        }
-      `}</style>
     </div>
   );
 }
@@ -208,38 +246,95 @@ export default function AddressPage() {
     }
   }, [activeIndex]);
 
-  const { setLocation, setBuildingInsights } = useEstimatorStore();
+  const { location, buildingInsights, setLocation, setSatelliteImageUrl, setBuildingInsights, setEstimateId, setModelStatus, setModelUrl } = useEstimatorStore();
+  const [loadingStatus, setLoadingStatus] = useState("starting");
+  const [reviewImages, setReviewImages] = useState<string[] | null>(null);
+  const estimateRef = useRef<{ estimateId: string } | null>(null);
 
   const selectProperty = useCallback(
     async (property: Property) => {
       setIsOpen(false);
       setLoading(true);
+      setLoadingStatus("starting");
 
-      const addressString = `${property.line1}, ${property.line2}`;
       try {
-        const result = await startEstimate(addressString);
-        console.log("Backend estimate result:", result);
-        sessionStorage.setItem("latest-estimate", JSON.stringify(result));
+        const fullAddress = `${property.line1}, ${property.line2}`;
+        const result = await startEstimate(fullAddress);
 
-        setLocation({ lat: result.lat, lng: result.lng }, result.address);
-
-        try {
-          const insights = await fetchBuildingInsights(result.lat, result.lng);
-          setBuildingInsights(insights);
-        } catch (insightsErr) {
-          console.error("Failed to fetch building insights:", insightsErr);
-          setBuildingInsights(null);
+        if (!result.buildingInsights) {
+          toast.error("Solar data unavailable", {
+            description: "Could not retrieve solar/roof data for this address. Please try a different address.",
+          });
+          setLoading(false);
+          return;
         }
-      } catch (e) {
-        console.error("Failed to call backend:", e);
+
+        setLocation(result.location, result.address);
+        setSatelliteImageUrl(result.satelliteImageUrl);
+        setBuildingInsights(result.buildingInsights);
+        setEstimateId(result.estimateId);
+        estimateRef.current = { estimateId: result.estimateId };
+
+        setLoadingStatus("capturing");
+        const captured = await captureImages(result.estimateId, result.location.lat, result.location.lng);
+
+        setReviewImages(captured.images);
+        setLoadingStatus("review");
+      } catch (err) {
+        console.error("Failed to load building data:", err);
+        toast.error("Estimate failed", {
+          description: err instanceof Error ? err.message : "Something went wrong. Please try again.",
+        });
+        setLoading(false);
       }
     },
-    [setLocation, setBuildingInsights],
+    [setLocation, setSatelliteImageUrl, setBuildingInsights, setEstimateId, navigate],
   );
 
-  const handleLoadingComplete = useCallback(() => {
-    navigate("/estimator");
-  }, [navigate]);
+  const handleConfirmImages = useCallback(
+    async (selectedIndices: number[]) => {
+      const eid = estimateRef.current?.estimateId;
+      if (!eid) return;
+
+      setReviewImages(null);
+      setLoadingStatus("generating");
+
+      try {
+        await confirmGeneration(eid, selectedIndices);
+
+        const poll = async (): Promise<void> => {
+          const status = await pollModelStatus(eid);
+          setLoadingStatus(status.status);
+          setModelStatus(status.status);
+
+          if (status.status === "completed") {
+            setModelUrl(getModelUrl(eid));
+            navigate("/estimator");
+          } else if (status.status === "failed") {
+            toast.error("3D model failed", { description: status.error ?? "Generation failed" });
+            navigate("/estimator");
+          } else {
+            await new Promise((r) => setTimeout(r, 2000));
+            return poll();
+          }
+        };
+        await poll();
+      } catch (err) {
+        console.error("Generation failed:", err);
+        toast.error("Generation failed", {
+          description: err instanceof Error ? err.message : "Something went wrong.",
+        });
+        setLoading(false);
+      }
+    },
+    [setModelStatus, setModelUrl, navigate],
+  );
+
+  const handleCancelReview = useCallback(() => {
+    setReviewImages(null);
+    setLoading(false);
+    setLoadingStatus("starting");
+  }, []);
 
   /* Keyboard navigation */
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -280,8 +375,34 @@ export default function AddressPage() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
+  const noop = useCallback(() => {}, []);
+
   if (loading) {
-    return <LoadingOverlay onComplete={handleLoadingComplete} />;
+    if (reviewImages) {
+      return (
+        <ImageReviewOverlay
+          images={reviewImages}
+          onConfirm={handleConfirmImages}
+          onCancel={handleCancelReview}
+        />
+      );
+    }
+    return (
+      <>
+        {location && (
+          <div className="fixed inset-0 z-0 opacity-0 pointer-events-none">
+            <Scene
+              location={location}
+              buildingInsights={buildingInsights}
+              selectedIndex={-1}
+              onSelectSegment={noop}
+              onCreditsUpdate={noop}
+            />
+          </div>
+        )}
+        <LoadingSpinner status={loadingStatus} />
+      </>
+    );
   }
 
   return (
@@ -289,24 +410,23 @@ export default function AddressPage() {
       {/* ---- NAV ---- */}
       <div className="pt-4">
         <GlassNav variant="dark" minWidth={1180}>
-          <Link to="/" className="flex items-center gap-2.5 no-underline">
+          <Link to="/" className="flex items-center no-underline">
             <BrandMark size={30} />
-            <span className="text-[15px] font-semibold tracking-[-0.3px] text-white">Crew</span>
           </Link>
 
           <div className="w-px h-6.5 bg-white/12 ml-3" />
 
-          <div className="ml-3">
+          <div className="flex-1 flex justify-center">
             <StepDots />
           </div>
 
-          <div className="flex-1" />
-
           <Link
             to="/"
-            className="py-2.5 px-3 bg-transparent text-white/85 border border-white/15 rounded-[10px] text-[12.5px] font-semibold no-underline font-sans hover:bg-white/5 transition-colors"
+            className="flex items-center justify-center w-9 h-9 bg-transparent border border-white/15 rounded-[10px] no-underline hover:bg-white/5 transition-colors"
           >
-            Back
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M10 3L5 8L10 13" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </Link>
         </GlassNav>
       </div>
@@ -367,8 +487,8 @@ export default function AddressPage() {
                     data-suggestion
                     onClick={() => selectProperty(prop)}
                     onMouseEnter={() => setActiveIndex(i)}
-                    className={`w-full flex items-start gap-3 px-5 py-3.5 text-left bg-transparent border-none cursor-pointer transition-colors font-sans ${
-                      activeIndex === i ? "bg-blue-soft" : "hover:bg-paper-2"
+                    className={`group w-full flex items-start gap-3 px-5 py-3.5 text-left border-none cursor-pointer transition-colors font-sans ${
+                      activeIndex === i ? "bg-blue-100" : "bg-transparent hover:bg-blue-100"
                     }`}
                   >
                     <div className="mt-0.5 shrink-0">
@@ -378,8 +498,7 @@ export default function AddressPage() {
                       <div className="text-[14px] font-medium text-ink/80 truncate">
                         <HighlightMatch text={prop.line1} query={query} />
                       </div>
-                      <div className="text-[12px] text-muted-2 mt-0.5 truncate">{prop.line2}</div>
-                      <div className="text-[10.5px] font-mono text-muted-2/70 mt-0.5">{prop.parcel}</div>
+                      <div className="text-[12px] text-muted-2 mt-0.5 truncate">{prop.line2.split(" · ")[0]}</div>
                     </div>
                     {prop.tag && prop.tagLabel && (
                       <span
@@ -404,32 +523,30 @@ export default function AddressPage() {
               </div>
             )}
 
-            {/* footer with keyboard hints — visible whenever dropdown is open */}
-            {isOpen && (
-              <div className="flex items-center gap-4 px-5 py-2.5 border-t border-hair bg-paper-2/50">
-                <div className="flex items-center gap-1.5">
-                  <kbd className="font-mono text-[9px] text-muted-2 bg-white py-0.5 px-1.5 rounded border border-hair shadow-sm">
-                    &uarr;
-                  </kbd>
-                  <kbd className="font-mono text-[9px] text-muted-2 bg-white py-0.5 px-1.5 rounded border border-hair shadow-sm">
-                    &darr;
-                  </kbd>
-                  <span className="text-[10px] text-muted-2 ml-0.5">navigate</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <kbd className="font-mono text-[9px] text-muted-2 bg-white py-0.5 px-1.5 rounded border border-hair shadow-sm">
-                    &crarr;
-                  </kbd>
-                  <span className="text-[10px] text-muted-2 ml-0.5">select</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <kbd className="font-mono text-[9px] text-muted-2 bg-white py-0.5 px-1.5 rounded border border-hair shadow-sm">
-                    esc
-                  </kbd>
-                  <span className="text-[10px] text-muted-2 ml-0.5">close</span>
-                </div>
+            {/* keyboard hints — always visible */}
+            <div className="flex items-center gap-4 px-5 py-2.5 border-t border-hair bg-paper-2/50">
+              <div className="flex items-center gap-1.5">
+                <kbd className="font-mono text-[9px] text-muted-2 bg-white py-0.5 px-1.5 rounded border border-hair shadow-sm">
+                  &uarr;
+                </kbd>
+                <kbd className="font-mono text-[9px] text-muted-2 bg-white py-0.5 px-1.5 rounded border border-hair shadow-sm">
+                  &darr;
+                </kbd>
+                <span className="text-[10px] text-muted-2 ml-0.5">navigate</span>
               </div>
-            )}
+              <div className="flex items-center gap-1.5">
+                <kbd className="font-mono text-[9px] text-muted-2 bg-white py-0.5 px-1.5 rounded border border-hair shadow-sm">
+                  &crarr;
+                </kbd>
+                <span className="text-[10px] text-muted-2 ml-0.5">select</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <kbd className="font-mono text-[9px] text-muted-2 bg-white py-0.5 px-1.5 rounded border border-hair shadow-sm">
+                  esc
+                </kbd>
+                <span className="text-[10px] text-muted-2 ml-0.5">close</span>
+              </div>
+            </div>
           </div>
         </div>
 

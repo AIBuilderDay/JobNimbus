@@ -1,12 +1,51 @@
-# Secrets
+# Secrets / env
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
-# Python
+# Python bytecode / caches
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+
+# Virtualenvs
 .venv/
+venv/
+env/
+.python-version
+
+# Test / type-check / coverage caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+
+# SQLite (DATABASE_URL=sqlite:///./jobnimbus.db is hackathon-local + ephemeral)
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
+Thumbs.db

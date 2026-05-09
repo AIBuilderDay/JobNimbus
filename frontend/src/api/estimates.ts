@@ -1,4 +1,4 @@
-import { estimates, statusCounts, properties, lineItems } from "../data/estimates";
+import { estimates, statusCounts, lineItems } from "../data/estimates";
 import type { Estimate, EstimateStatus, Property, LineItem } from "../types/estimate";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
