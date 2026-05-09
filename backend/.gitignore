@@ -39,6 +39,9 @@ dist/
 # Logs
 *.log
 
+# One-shot scratch output (e.g. EagleView dump payloads). See scripts/dump_eagleview_payload.py.
+tmp/
+
 # IDE
 .vscode/
 .idea/
