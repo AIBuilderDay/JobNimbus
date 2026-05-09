@@ -193,6 +193,7 @@ export default function LandingPage() {
 
           <div className="flex-1" />
 
+          <NavIconButton icon="auto_awesome" tooltip="AI agent" theme="light" onClick={() => navigate("/agent")} />
           <NavIconButton icon="history" tooltip="Estimate history" theme="light" onClick={() => navigate("/estimates")} />
           <NavIconButton icon="add" tooltip="Start estimate" variant="primary" theme="light" onClick={() => navigate("/address")} />
         </GlassNav>

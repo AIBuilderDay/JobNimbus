@@ -11,6 +11,10 @@ dependencies = [
     "python-json-logger>=3.1",
     "numpy>=2.0",
     "tifffile>=2024.1",
+    "anthropic>=0.45.0",
+    "fastmcp>=2.0.0",
+    "pypdf>=5.0",
+    "openpyxl>=3.1",
 ]
 
 [dependency-groups]
