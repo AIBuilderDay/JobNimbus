@@ -131,7 +131,7 @@ tasks:
       - docker rm jobnimbus-backend 2>/dev/null || true
       - docker volume create jobnimbus-backend-data 2>/dev/null || true
       - docker build --no-cache -t jobnimbus-backend .
-      - op run --env-file=.env -- docker run -d -p 8000:8000 -v jobnimbus-backend-data:/app/data -e DATABASE_URL=sqlite:///./data/jobnimbus.db -e GOOGLE_MAPS_API_KEY -e ANTHROPIC_API_KEY -e REPLICATE_API_TOKEN -e EAGLEVIEW_CLIENT_ID -e EAGLEVIEW_CLIENT_SECRET -e EAGLEVIEW_BASE_URL --name jobnimbus-backend jobnimbus-backend
+      - op run --env-file=.env -- docker run -d -p 8000:8000 -v jobnimbus-backend-data:/app/data -e DATABASE_URL=sqlite:///./data/jobnimbus.db -e GOOGLE_MAPS_API_KEY -e ANTHROPIC_API_KEY -e REPLICATE_API_TOKEN -e EAGLEVIEW_CLIENT_ID -e EAGLEVIEW_CLIENT_SECRET -e EAGLEVIEW_BASE_URL -e RESEND_API_KEY --name jobnimbus-backend jobnimbus-backend
 
   backend:down:
     desc: Stop backend container

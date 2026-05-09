@@ -24,6 +24,7 @@ from routers import (
     places,
     pricing,
     proposal,
+    proposal_send,
     roof_polygons,
     summary,
 )
@@ -80,6 +81,7 @@ app.add_middleware(
     CORSMiddleware,
     # 5173 is Vite's default; 5174 is what `pnpm dev` uses per package.json.
     allow_origins=["http://localhost:5173", "http://localhost:5174"],
+    allow_origin_regex=r"https://.*\.vercel\.app$",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -96,6 +98,7 @@ app.include_router(benchmark.router)
 app.include_router(estimate.router)
 app.include_router(pricing.router)
 app.include_router(proposal.router)
+app.include_router(proposal_send.router)
 app.include_router(finalize.router)
 app.include_router(summary.router)
 app.include_router(blueprint.router)
