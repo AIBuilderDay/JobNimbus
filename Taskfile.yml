@@ -1,11 +1,28 @@
 version: "3"
 
+includes:
+  env:
+    taskfile: ./tasks/env.yml
+    dir: .
+
 tasks:
+  default:
+    desc: "Show available tasks"
+    silent: true
+    cmds:
+      - task --list
+
   backend:dev:
     desc: Run backend dev server locally with secrets injected from 1Password
     dir: backend
     cmds:
       - op run --env-file=.env -- uv run fastapi dev main.py
+
+  backend:test:
+    desc: Run backend tests
+    dir: backend
+    cmds:
+      - uv run pytest tests/ -v
 
   frontend:dev:
     desc: Run frontend Vite dev server with secrets injected from 1Password
