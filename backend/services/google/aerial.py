@@ -8,7 +8,6 @@ from settings import settings
 log = get_logger(__name__)
 
 AERIAL_API_BASE = "https://aerialview.googleapis.com/v1"
-FRONTEND_REFERER = "http://localhost:5173"
 HTTP_TIMEOUT = 15.0
 
 
@@ -23,7 +22,7 @@ async def lookup_video(address: str) -> dict | None:
 
     try:
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-            resp = await client.get(url, headers={"Referer": FRONTEND_REFERER})
+            resp = await client.get(url)
     except httpx.HTTPError:
         log.exception("aerial lookup failed for address=%s", address)
         raise
@@ -52,10 +51,7 @@ async def render_video(address: str) -> dict:
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             resp = await client.post(
                 url,
-                headers={
-                    "Content-Type": "application/json",
-                    "Referer": FRONTEND_REFERER,
-                },
+                headers={"Content-Type": "application/json"},
                 json={"address": address},
             )
         resp.raise_for_status()

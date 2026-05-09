@@ -118,7 +118,7 @@ function GlassPanel({ id, children, className = "", style, editLayout, positions
 export default function EstimatorPage() {
   const navigate = useNavigate();
   const {
-    location, address, satelliteImageUrl, buildingInsights, selectedSegmentIndex, setSelectedSegmentIndex,
+    location, address, buildingInsights, selectedSegmentIndex, setSelectedSegmentIndex,
     estimateId, modelStatus, modelUrl, modelError,
     setModelStatus, setModelUrl, setModelError,
   } = useEstimatorStore();
@@ -381,13 +381,6 @@ export default function EstimatorPage() {
         <div className="text-[13px] font-semibold mb-2 break-words leading-tight">
           {address ?? "No address selected"}
         </div>
-        {satelliteImageUrl && (
-          <img
-            src={satelliteImageUrl}
-            alt="Satellite view of property"
-            className="w-full rounded-lg border border-hair mb-3"
-          />
-        )}
         {address && (
           <button
             onClick={handleAerialClick}
