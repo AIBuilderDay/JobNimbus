@@ -7,7 +7,7 @@ interface GlassNavProps {
   wrapperClassName?: string;
 }
 
-export default function GlassNav({ children, variant = "dark", minWidth = 1240, wrapperClassName }: GlassNavProps) {
+export default function GlassNav({ children, variant = "dark", minWidth, wrapperClassName }: GlassNavProps) {
   const base = variant === "dark"
     ? "bg-white/10 shadow-[0_1px_0_rgba(255,255,255,0.10)_inset,0_8px_26px_rgba(0,0,0,0.25),0_0_0_1px_rgba(255,255,255,0.10)]"
     : "bg-white/88 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_8px_26px_rgba(21,41,82,0.10),0_0_0_1px_rgba(21,41,82,0.06)]";
@@ -15,8 +15,8 @@ export default function GlassNav({ children, variant = "dark", minWidth = 1240, 
   return (
     <div className={wrapperClassName ?? "sticky top-4 z-50 flex justify-center px-6 pointer-events-none"}>
       <nav
-        className={`pointer-events-auto flex flex-row items-center justify-between gap-4.5 py-3 pl-5 pr-3.5 backdrop-blur-2xl rounded-[18px] ${base}`}
-        style={{ minWidth }}
+        className={`pointer-events-auto flex flex-row items-center justify-between gap-4.5 py-3 pl-5 pr-3.5 backdrop-blur-2xl rounded-[18px] max-w-full ${base}`}
+        style={{ minWidth: minWidth ? `min(${minWidth}px, calc(100vw - 48px))` : undefined }}
       >
         {children}
       </nav>

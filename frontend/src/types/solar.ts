@@ -7,6 +7,7 @@ const LatLng = z.object({
 
 export const RoofSegmentSchema = z.object({
   id: z.number(),
+  uid: z.string().optional(),
   pitch_degrees: z.number().nullable(),
   azimuth_degrees: z.number().nullable(),
   area_sq_ft: z.number(),

@@ -136,6 +136,52 @@ export async function fetchCatalog(category?: string): Promise<CatalogItem[]> {
   }));
 }
 
+export interface DashboardStats {
+  pipeline_value_cents: number;
+  pipeline_count: number;
+  signed_count: number;
+  signed_value_cents: number;
+  drafts_open: number;
+  drafts_stalled: number;
+}
+
+export async function fetchDashboardStats(): Promise<DashboardStats> {
+  const res = await fetch("/api/listings/stats");
+  if (!res.ok) {
+    throw new Error(`Failed to fetch stats: ${res.status}`);
+  }
+  return res.json();
+}
+
+export interface SaveDraftPayload {
+  estimate_id: string;
+  address: string;
+  selected_segment_count: number;
+  total_segments: number;
+  total_roof_area_sq_ft: number;
+  material_name: string | null;
+  total_display: string | null;
+  margin_display: string | null;
+}
+
+export async function saveDraft(payload: SaveDraftPayload): Promise<void> {
+  const res = await fetch("/api/listings/draft", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to save draft: ${res.status}`);
+  }
+}
+
+export async function deleteDraft(estimateId: string): Promise<void> {
+  const res = await fetch(`/api/listings/${estimateId}`, { method: "DELETE" });
+  if (!res.ok) {
+    throw new Error(`Failed to delete draft: ${res.status}`);
+  }
+}
+
 export interface MaterialCard {
   id: string;
   name: string;

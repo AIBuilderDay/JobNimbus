@@ -8,7 +8,11 @@ import GlassNav, {
   NavIconButton,
 } from "../components/ui/GlassNav";
 import StatusPill from "../components/ui/StatusPill";
-import { useEstimates } from "../hooks/useEstimates";
+import { useEstimates, useDashboardStats } from "../hooks/useEstimates";
+import type { DashboardStats } from "../api/estimates";
+import { startEstimate } from "../api/estimate";
+import { useEstimatorStore } from "../store/estimatorStore";
+import { toast } from "sonner";
 import type { Estimate, EstimateStatus } from "../types/estimate";
 
 /* ------------------------------------------------------------------ */
@@ -53,25 +57,46 @@ function StatCard({ label, value, sub, accent = false }: StatCardProps) {
   );
 }
 
-function StatCards() {
+function formatDollars(cents: number): string {
+  return `$${Math.round(cents / 100).toLocaleString()}`;
+}
+
+function StatCards({ stats }: { stats: DashboardStats | undefined }) {
+  const pipeline = stats
+    ? formatDollars(stats.pipeline_value_cents)
+    : "—";
+  const pipelineSub = stats
+    ? `${stats.pipeline_count} active${stats.pipeline_count ? ` · avg ${formatDollars(Math.round(stats.pipeline_value_cents / (stats.pipeline_count || 1)))}` : ""}`
+    : "loading…";
+
+  const signed = stats ? String(stats.signed_count) : "—";
+  const signedSub = stats
+    ? `${formatDollars(stats.signed_value_cents)} closed`
+    : "loading…";
+
+  const drafts = stats ? String(stats.drafts_open) : "—";
+  const draftsSub = stats
+    ? `${stats.drafts_stalled} stalled > 7 days`
+    : "loading…";
+
   return (
     <div className="grid grid-cols-4 gap-4 mb-7">
       <StatCard
         label="PIPELINE VALUE"
-        value="$184,210"
-        sub="7 active · avg $26,316"
+        value={pipeline}
+        sub={pipelineSub}
         accent
       />
       <StatCard
-        label="SIGNED · 90 DAYS"
-        value="12"
-        sub="$298,640 closed · 41% win rate"
+        label="SIGNED"
+        value={signed}
+        sub={signedSub}
       />
-      <StatCard label="DRAFTS OPEN" value="5" sub="3 stalled > 7 days" />
+      <StatCard label="DRAFTS OPEN" value={drafts} sub={draftsSub} />
       <StatCard
         label="AVG TIME TO SEND"
-        value="4:12"
-        sub="capture → proposal sent"
+        value="—"
+        sub="coming soon"
       />
     </div>
   );
@@ -150,14 +175,19 @@ const progressColor: Record<EstimateStatus, string> = {
 function EstimateRow({
   estimate,
   isLast,
+  onClick,
+  resuming,
 }: {
   estimate: Estimate;
   isLast: boolean;
+  onClick?: () => void;
+  resuming?: boolean;
 }) {
   const grad = thumbnailGradient[estimate.status];
 
   return (
     <div
+      onClick={onClick}
       className={`grid items-center gap-3.5 px-3.5 py-[14px] hover:bg-blue-100 transition-colors cursor-pointer ${
         isLast ? "" : "border-b border-hair/40"
       }`}
@@ -256,9 +286,13 @@ function EstimateRow({
         </div>
       </div>
 
-      {/* Arrow */}
+      {/* Arrow / spinner */}
       <div className="flex items-center justify-center text-muted-2 text-lg">
-        &rarr;
+        {resuming ? (
+          <div className="w-4 h-4 border-2 border-blue border-t-transparent rounded-full animate-spin" />
+        ) : (
+          <span>&rarr;</span>
+        )}
       </div>
     </div>
   );
@@ -366,13 +400,17 @@ function Pagination({
 /*  Main Page                                                          */
 /* ------------------------------------------------------------------ */
 
+const STEP_PATHS = ["/address", "/estimator", "/pricing", "/proposal", "/finalization"];
+
 export default function EstimatesPage() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<FilterKey>("all");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(9);
+  const [resumingId, setResumingId] = useState<string | null>(null);
 
   const { data, isLoading } = useEstimates(filter);
+  const { data: stats } = useDashboardStats();
   const estimates = data?.estimates ?? [];
   const counts = data?.counts ?? { all: 0, draft: 0, sent: 0, signed: 0, expired: 0 };
   const total = data?.total ?? 0;
@@ -382,6 +420,35 @@ export default function EstimatesPage() {
   const handleFilterChange = (key: FilterKey) => {
     setFilter(key);
     setPage(1);
+  };
+
+  const handleRowClick = async (estimate: Estimate) => {
+    if (resumingId) return;
+
+    const fullAddress = estimate.cityState
+      ? `${estimate.address}, ${estimate.cityState}`
+      : estimate.address;
+
+    setResumingId(estimate.id);
+    try {
+      const result = await startEstimate(fullAddress);
+      const store = useEstimatorStore.getState();
+      store.reset();
+      store.setLocation(result.location, result.address);
+      store.setSatelliteImageUrl(result.satelliteImageUrl);
+      store.setBuildingInsights(result.buildingInsights);
+      store.setEstimateId(result.estimateId);
+
+      const step = estimate.progress?.current ?? 2;
+      const path = STEP_PATHS[Math.min(step, STEP_PATHS.length) - 1];
+      navigate(path);
+    } catch (err) {
+      console.error("Resume failed:", err);
+      toast.error("Could not resume estimate", {
+        description: err instanceof Error ? err.message : "Something went wrong.",
+      });
+      setResumingId(null);
+    }
   };
 
   /* ---- table header columns ---- */
@@ -457,7 +524,7 @@ export default function EstimatesPage() {
         </div>
 
         {/* Stat cards */}
-        <StatCards />
+        <StatCards stats={stats} />
 
         {/* Filter bar */}
         <FilterBar
@@ -500,6 +567,8 @@ export default function EstimatesPage() {
                 key={est.id}
                 estimate={est}
                 isLast={i === paged.length - 1}
+                onClick={() => handleRowClick(est)}
+                resuming={resumingId === est.id}
               />
             ))
           )}

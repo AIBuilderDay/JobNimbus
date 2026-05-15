@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import DarkLayout from "../components/layout/DarkLayout";
 import BrandMark from "../components/ui/BrandMark";
@@ -125,8 +126,14 @@ function fmtUSD(cents: number): string {
 
 export default function FinalizationPage() {
   const navigate = useNavigate();
-  const { address, estimateId, proposalState, pricingState, lastProposalPdfBase64 } = useEstimatorStore();
+  const { address, estimateId, proposalState, pricingState, lastProposalPdfBase64, getMaxAllowedStep, reset } = useEstimatorStore();
   const { isSyncing, lastSyncedAt } = useAutoSync();
+
+  useEffect(() => {
+    if (getMaxAllowedStep() < 5) {
+      navigate(getMaxAllowedStep() < 2 ? "/address" : "/estimator", { replace: true });
+    }
+  }, [getMaxAllowedStep, navigate]);
   const { data: pricing } = usePricing(estimateId);
   const totalDisplay = pricing ? fmtUSD(pricing.customer_total_cents) : "$25,582";
   const recipientEmail = proposalState.recipient || "maria.delgado@gmail.com";
@@ -192,7 +199,7 @@ export default function FinalizationPage() {
         <SavedIndicator isSyncing={isSyncing} lastSyncedAt={lastSyncedAt} />
         <NavDivider />
         <NavIconButton icon="list" tooltip="All estimates" onClick={() => navigate("/estimates")} />
-        <NavIconButton icon="add" tooltip="New estimate" variant="primary" onClick={() => navigate("/address")} />
+        <NavIconButton icon="add" tooltip="New estimate" variant="primary" onClick={() => { reset(); navigate("/address"); }} />
       </GlassNav>
 
       {/* Body */}

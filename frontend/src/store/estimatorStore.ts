@@ -69,6 +69,7 @@ interface EstimatorState {
   setLastProposalPdfBase64: (base64: string | null) => void;
   setSyncStatus: (syncing: boolean, syncedAt?: number) => void;
   reset: () => void;
+  getMaxAllowedStep: () => number;
 }
 
 export const useEstimatorStore = create<EstimatorState>()(
@@ -97,7 +98,17 @@ export const useEstimatorStore = create<EstimatorState>()(
           },
         })),
       setSatelliteImageUrl: (url) => set({ satelliteImageUrl: url }),
-      setBuildingInsights: (data) => set({ buildingInsights: data }),
+      setBuildingInsights: (data) => {
+        if (data) {
+          const segments = data.segments.map((seg, i) => ({
+            ...seg,
+            uid: seg.uid ?? `seg-${crypto.randomUUID().slice(0, 8)}-${i}`,
+          }));
+          set({ buildingInsights: { ...data, segments } });
+        } else {
+          set({ buildingInsights: null });
+        }
+      },
       toggleSegmentIndex: (index) =>
         set((state) => {
           const has = state.selectedSegmentIndices.includes(index);
@@ -134,6 +145,12 @@ export const useEstimatorStore = create<EstimatorState>()(
       setLastProposalPdfBase64: (base64) => set({ lastProposalPdfBase64: base64 }),
       setSyncStatus: (syncing, syncedAt) =>
         set({ isSyncing: syncing, ...(syncedAt != null ? { lastSyncedAt: syncedAt } : {}) }),
+      getMaxAllowedStep: () => {
+        const state = useEstimatorStore.getState();
+        if (!state.address || !state.buildingInsights) return 1;
+        if (state.selectedSegmentIndices.length === 0 || !state.selectedMaterialId) return 2;
+        return 5;
+      },
       reset: () =>
         set({
           location: null,

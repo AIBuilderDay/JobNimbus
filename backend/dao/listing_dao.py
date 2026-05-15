@@ -1,5 +1,5 @@
 from logger import get_logger
-from models import EstimateLineItem, EstimateListing, EstimateProgress, StatusCounts
+from models import DashboardStats, EstimateLineItem, EstimateListing, EstimateProgress, StatusCounts
 
 from .database import get_connection
 
@@ -87,6 +87,32 @@ def get_line_items(estimate_id: str) -> list[EstimateLineItem]:
     ]
 
 
+def get_dashboard_stats() -> DashboardStats:
+    with get_connection() as conn:
+        row = conn.execute(
+            """SELECT
+                 COALESCE(SUM(CASE WHEN status IN ('draft','sent')
+                     THEN CAST(REPLACE(REPLACE(total_display,'$',''),',','') AS INTEGER)
+                     ELSE 0 END), 0) AS pipeline_cents,
+                 SUM(CASE WHEN status IN ('draft','sent') THEN 1 ELSE 0 END) AS pipeline_count,
+                 SUM(CASE WHEN status='signed' THEN 1 ELSE 0 END) AS signed_count,
+                 COALESCE(SUM(CASE WHEN status='signed'
+                     THEN CAST(REPLACE(REPLACE(total_display,'$',''),',','') AS INTEGER)
+                     ELSE 0 END), 0) AS signed_cents,
+                 SUM(CASE WHEN status='draft' THEN 1 ELSE 0 END) AS drafts_open,
+                 SUM(CASE WHEN status='draft' AND stale_days > 7 THEN 1 ELSE 0 END) AS drafts_stalled
+               FROM estimate_listings""",
+        ).fetchone()
+    return DashboardStats(
+        pipeline_value_cents=row["pipeline_cents"] * 100,
+        pipeline_count=row["pipeline_count"],
+        signed_count=row["signed_count"],
+        signed_value_cents=row["signed_cents"] * 100,
+        drafts_open=row["drafts_open"],
+        drafts_stalled=row["drafts_stalled"],
+    )
+
+
 def save_listing(listing: EstimateListing) -> None:
     progress_current = listing.progress.current if listing.progress else None
     progress_total = listing.progress.total if listing.progress else None
@@ -103,6 +129,19 @@ def save_listing(listing: EstimateListing) -> None:
              listing.status, progress_current, progress_total,
              listing.updated, listing.updated_sub, listing.stale_days),
         )
+
+
+def delete_listing(estimate_id: str) -> bool:
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "DELETE FROM estimate_listings WHERE id = ?",
+            (estimate_id,),
+        )
+        conn.execute(
+            "DELETE FROM estimate_line_items WHERE estimate_id = ?",
+            (estimate_id,),
+        )
+    return cursor.rowcount > 0
 
 
 def save_line_item(estimate_id: str, item: EstimateLineItem, sort_order: int = 0) -> None:

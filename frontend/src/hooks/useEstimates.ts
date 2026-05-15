@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchEstimates, fetchProperties, fetchLineItems, fetchCatalog, fetchMaterials } from "../api/estimates";
+import { fetchEstimates, fetchProperties, fetchLineItems, fetchCatalog, fetchMaterials, fetchDashboardStats } from "../api/estimates";
 import type { EstimateStatus } from "../types/estimate";
 
 export function useEstimates(filter: "all" | EstimateStatus = "all") {
@@ -31,6 +31,14 @@ export function useCatalog(category?: string) {
     queryKey: ["catalog", category],
     queryFn: () => fetchCatalog(category),
     staleTime: 300_000,
+  });
+}
+
+export function useDashboardStats() {
+  return useQuery({
+    queryKey: ["dashboard-stats"],
+    queryFn: fetchDashboardStats,
+    staleTime: 30_000,
   });
 }
 

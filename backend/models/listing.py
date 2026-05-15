@@ -51,3 +51,14 @@ class StatusCounts(BaseModel):
     sent: int
     signed: int
     expired: int
+
+
+class DashboardStats(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    pipeline_value_cents: int
+    pipeline_count: int
+    signed_count: int
+    signed_value_cents: int
+    drafts_open: int
+    drafts_stalled: int

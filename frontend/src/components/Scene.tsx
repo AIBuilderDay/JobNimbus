@@ -1,4 +1,4 @@
-import { memo, useMemo, useCallback, useRef } from "react";
+import { memo, useMemo, useCallback, useRef, useState } from "react";
 import DeckGL from "@deck.gl/react";
 import { Tile3DLayer } from "@deck.gl/geo-layers";
 import type { PickingInfo } from "@deck.gl/core";
@@ -15,6 +15,7 @@ interface Props {
   onClearSegments: () => void;
   onCreditsUpdate: (credits: string) => void;
   topDown?: boolean;
+  satelliteImageUrl?: string | null;
 }
 
 const CONTROLLER_OPTS = { inertia: true, dragRotate: true } as const;
@@ -30,7 +31,9 @@ export default memo(function Scene({
   onToggleSegment,
   onCreditsUpdate,
   topDown = false,
+  satelliteImageUrl,
 }: Props) {
+  const [tilesReady, setTilesReady] = useState(false);
   const viewState = useMemo(() => {
     // Prefer the building center (where Solar actually measured) over the geocoded
     // address point (often a driveway/parking spot offset from the structure).
@@ -60,6 +63,7 @@ export default memo(function Scene({
   creditsRef.current = onCreditsUpdate;
 
   const handleTilesetLoad = useCallback((tileset: unknown) => {
+    setTilesReady(true);
     const ts = tileset as { asset?: { copyright?: string } };
     if (ts.asset?.copyright) {
       const parts = ts.asset.copyright
@@ -80,7 +84,7 @@ export default memo(function Scene({
           fetch: { headers: { "X-GOOG-API-KEY": API_KEY } },
         },
         onTilesetLoad: handleTilesetLoad,
-        maximumScreenSpaceError: 8,
+        maximumScreenSpaceError: 16,
         operation: "terrain+draw",
       }),
     [handleTilesetLoad]
@@ -114,14 +118,33 @@ export default memo(function Scene({
   );
 
   return (
-    <DeckGL
-      initialViewState={viewState}
-      controller={CONTROLLER_OPTS}
-      layers={layers}
-      onClick={handleClick}
-      getCursor={getCursor}
-      useDevicePixels={1}
-      style={{ position: "absolute", inset: "0" }}
-    />
+    <>
+      {satelliteImageUrl && !tilesReady && (
+        <div className="absolute inset-0 z-0 flex items-center justify-center bg-[#0e1830]">
+          <img
+            src={satelliteImageUrl}
+            alt="Satellite preview"
+            className="w-full h-full object-cover opacity-60"
+          />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-8 h-8 border-[3px] border-blue-bright border-t-transparent rounded-full animate-spin" />
+          </div>
+        </div>
+      )}
+      <DeckGL
+        initialViewState={viewState}
+        controller={CONTROLLER_OPTS}
+        layers={layers}
+        onClick={handleClick}
+        getCursor={getCursor}
+        useDevicePixels={1}
+        style={{
+          position: "absolute",
+          inset: "0",
+          opacity: tilesReady ? "1" : "0",
+          transition: "opacity 0.5s ease-in",
+        }}
+      />
+    </>
   );
 });

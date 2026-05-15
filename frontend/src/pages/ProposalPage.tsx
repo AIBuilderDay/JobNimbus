@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import DarkLayout from "../components/layout/DarkLayout";
 import BrandMark from "../components/ui/BrandMark";
@@ -102,8 +102,14 @@ function fmtUSD(cents: number): string {
 
 export default function ProposalPage() {
   const navigate = useNavigate();
-  const { address, estimateId, proposalState, pricingState, setProposalState, setLastProposalPdfBase64 } = useEstimatorStore();
+  const { address, estimateId, proposalState, pricingState, setProposalState, setLastProposalPdfBase64, getMaxAllowedStep } = useEstimatorStore();
   const { isSyncing, lastSyncedAt, syncNow } = useAutoSync();
+
+  useEffect(() => {
+    if (getMaxAllowedStep() < 4) {
+      navigate(getMaxAllowedStep() < 2 ? "/address" : "/estimator", { replace: true });
+    }
+  }, [getMaxAllowedStep, navigate]);
   const { data: pricing } = usePricing(estimateId);
   const totalDisplay = pricing ? fmtUSD(pricing.customer_total_cents) : "$25,582";
   const customerTotal = pricing ? pricing.customer_total_cents / 100 : 25582;

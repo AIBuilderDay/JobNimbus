@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import DarkLayout from "../components/layout/DarkLayout";
 import BrandMark from "../components/ui/BrandMark";
@@ -274,8 +274,14 @@ function AddItemModal({
 export default function PricingPage() {
   const navigate = useNavigate();
   const { data: fetchedLineItems = [] } = useLineItems();
-  const { address, estimateId, selectedMaterialId, buildingInsights, selectedSegmentIndices, pricingState, setPricingState } = useEstimatorStore();
+  const { address, estimateId, selectedMaterialId, buildingInsights, selectedSegmentIndices, pricingState, setPricingState, getMaxAllowedStep } = useEstimatorStore();
   const { isSyncing, lastSyncedAt, syncNow } = useAutoSync();
+
+  useEffect(() => {
+    if (getMaxAllowedStep() < 3) {
+      navigate(getMaxAllowedStep() < 2 ? "/address" : "/estimator", { replace: true });
+    }
+  }, [address, selectedSegmentIndices, selectedMaterialId, buildingInsights, navigate, getMaxAllowedStep]);
   const { data: materialsMap } = useMaterials();
   const { data: serverPricing } = usePricing(estimateId);
   const updatePricing = useUpdatePricing(estimateId);

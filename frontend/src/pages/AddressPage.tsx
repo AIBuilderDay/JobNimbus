@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import DarkLayout from "../components/layout/DarkLayout";
-import GlassNav, { NavIconButton, SavedIndicator } from "../components/ui/GlassNav";
+import GlassNav, { NavIconButton } from "../components/ui/GlassNav";
 import BrandMark from "../components/ui/BrandMark";
 import StepCrumbs from "../components/ui/StepCrumbs";
-import Scene from "../components/Scene";
+
 import { useProperties } from "../hooks/useEstimates";
 import { startEstimate } from "../api/estimate";
 import { useEstimatorStore } from "../store/estimatorStore";
 import { toast } from "sonner";
 import type { Property } from "../types/estimate";
-import { useAutoSync } from "../hooks/useAutoSync";
+
 
 
 /* ------------------------------------------------------------------ */
@@ -40,17 +40,224 @@ function PinIcon() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Loading overlay                                                    */
+/*  Animated loading overlay                                           */
 /* ------------------------------------------------------------------ */
 
-function LoadingSpinner() {
+const LOADING_STEPS = [
+  { label: "Locating property", icon: "📍" },
+  { label: "Pulling satellite imagery", icon: "🛰️" },
+  { label: "Analyzing roof segments", icon: "🏠" },
+  { label: "Building your estimate", icon: "📐" },
+];
+
+function LoadingSpinner({ apiReady, onComplete }: { apiReady: boolean; onComplete: () => void }) {
+  const [step, setStep] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [done, setDone] = useState(false);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+  const finishingRef = useRef(false);
+  const stepRef = useRef(0);
+
+  // Normal pace: advance one step every 2.2s
+  useEffect(() => {
+    if (finishingRef.current) return;
+    const id = setInterval(() => {
+      setStep((s) => {
+        const next = s < LOADING_STEPS.length - 1 ? s + 1 : s;
+        stepRef.current = next;
+        return next;
+      });
+    }, 2200);
+    return () => clearInterval(id);
+  }, []);
+
+  // When API ready: fast-forward remaining steps then navigate
+  useEffect(() => {
+    if (!apiReady || finishingRef.current) return;
+    finishingRef.current = true;
+
+    let current = stepRef.current;
+    const fastForward = setInterval(() => {
+      current++;
+      if (current >= LOADING_STEPS.length) {
+        clearInterval(fastForward);
+        setDone(true);
+        setTimeout(() => onCompleteRef.current(), 500);
+        return;
+      }
+      stepRef.current = current;
+      setStep(current);
+    }, 400);
+
+    return () => clearInterval(fastForward);
+  }, [apiReady]);
+
+  // Progress bar: tracks step position, smoothly fills within each step
+  useEffect(() => {
+    const stepTarget = done ? 100 : ((step + 1) / LOADING_STEPS.length) * 100;
+    const max = !done && !finishingRef.current && step < LOADING_STEPS.length - 1 ? stepTarget : done ? 100 : stepTarget - 2;
+
+    const tick = setInterval(() => {
+      setProgress((p) => {
+        if (p >= max) return max;
+        const speed = finishingRef.current ? 2 : 0.4;
+        return Math.min(p + speed, max);
+      });
+    }, 30);
+    return () => clearInterval(tick);
+  }, [step, done]);
+
   return (
-    <div className="fixed inset-0 z-[999] bg-[#0e1830] flex flex-col items-center justify-center">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(76,133,229,0.15),transparent_60%)]" />
-      <div className="relative z-10 flex flex-col items-center gap-5">
-        <div className="w-10 h-10 border-[3px] border-blue-bright border-t-transparent rounded-full animate-spin" />
-        <p className="text-[14px] font-medium text-white">Starting estimate...</p>
+    <div className="fixed inset-0 z-[999] bg-[#0e1830] flex flex-col items-center justify-center overflow-hidden">
+      {/* Animated background gradients */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse at 30% 50%, rgba(76,133,229,0.12), transparent 60%), radial-gradient(ellipse at 70% 40%, rgba(56,104,198,0.08), transparent 50%)",
+        }}
+      />
+
+      {/* Floating particles */}
+      {Array.from({ length: 20 }).map((_, i) => (
+        <div
+          key={i}
+          className="absolute rounded-full"
+          style={{
+            width: `${2 + (i % 3) * 2}px`,
+            height: `${2 + (i % 3) * 2}px`,
+            background: `rgba(76,133,229,${0.15 + (i % 4) * 0.08})`,
+            left: `${5 + (i * 4.7) % 90}%`,
+            top: `${10 + (i * 7.3) % 80}%`,
+            animation: `float-particle ${4 + (i % 3) * 2}s ease-in-out ${(i % 5) * 0.6}s infinite alternate`,
+          }}
+        />
+      ))}
+
+      {/* Scanning line */}
+      <div
+        className="absolute left-0 right-0 h-[1px] opacity-20"
+        style={{
+          background: "linear-gradient(90deg, transparent, #4C85E5, transparent)",
+          animation: "scan-line 3s ease-in-out infinite",
+        }}
+      />
+
+      <div className="relative z-10 flex flex-col items-center w-full max-w-[400px] px-6">
+        {/* Pulsing icon */}
+        <div
+          className="text-[48px] mb-8"
+          style={{ animation: "pulse-icon 2s ease-in-out infinite" }}
+        >
+          {LOADING_STEPS[step].icon}
+        </div>
+
+        {/* Current step label */}
+        <p
+          key={step}
+          className="text-[18px] font-medium text-white mb-2 text-center"
+          style={{ animation: "fade-up 0.5s ease-out" }}
+        >
+          {LOADING_STEPS[step].label}
+        </p>
+
+        {/* Sub-label */}
+        <p className="text-[13px] text-white/40 mb-8 text-center font-mono">
+          Step {step + 1} of {LOADING_STEPS.length}
+        </p>
+
+        {/* Progress bar */}
+        <div className="w-full h-[3px] bg-white/8 rounded-full overflow-hidden mb-6">
+          <div
+            className="h-full rounded-full transition-all duration-300 ease-out"
+            style={{
+              width: `${progress}%`,
+              background: "linear-gradient(90deg, #3868C6, #4C85E5, #6da3ff)",
+              boxShadow: "0 0 12px rgba(76,133,229,0.5)",
+            }}
+          />
+        </div>
+
+        {/* Step checklist */}
+        <div className="flex flex-col gap-3 w-full">
+          {LOADING_STEPS.map((s, i) => {
+            const done = i < step;
+            const active = i === step;
+            return (
+              <div
+                key={i}
+                className="flex items-center gap-3 transition-all duration-500"
+                style={{
+                  opacity: done ? 0.5 : active ? 1 : 0.2,
+                  transform: active ? "translateX(4px)" : "none",
+                }}
+              >
+                <div
+                  className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] shrink-0 transition-all duration-500"
+                  style={{
+                    background: done
+                      ? "rgba(58,166,118,0.25)"
+                      : active
+                        ? "rgba(76,133,229,0.3)"
+                        : "rgba(255,255,255,0.05)",
+                    border: done
+                      ? "1px solid rgba(58,166,118,0.4)"
+                      : active
+                        ? "1px solid rgba(76,133,229,0.5)"
+                        : "1px solid rgba(255,255,255,0.08)",
+                    boxShadow: active ? "0 0 12px rgba(76,133,229,0.3)" : "none",
+                  }}
+                >
+                  {done ? (
+                    <span className="text-[#6fdba6]">✓</span>
+                  ) : active ? (
+                    <div
+                      className="w-2 h-2 rounded-full bg-blue-bright"
+                      style={{ animation: "pulse-dot 1.5s ease-in-out infinite" }}
+                    />
+                  ) : (
+                    <span className="text-white/20">{i + 1}</span>
+                  )}
+                </div>
+                <span
+                  className={`text-[13px] font-medium transition-colors duration-500 ${
+                    done ? "text-[#6fdba6]/60" : active ? "text-white" : "text-white/20"
+                  }`}
+                >
+                  {s.label}
+                  {done && <span className="text-[#6fdba6]/40 ml-2 text-[11px]">Done</span>}
+                </span>
+              </div>
+            );
+          })}
+        </div>
       </div>
+
+      {/* CSS keyframes */}
+      <style>{`
+        @keyframes float-particle {
+          from { transform: translateY(0) scale(1); opacity: 0.3; }
+          to { transform: translateY(-20px) scale(1.3); opacity: 0.7; }
+        }
+        @keyframes scan-line {
+          0% { top: 10%; }
+          50% { top: 90%; }
+          100% { top: 10%; }
+        }
+        @keyframes pulse-icon {
+          0%, 100% { transform: scale(1); filter: drop-shadow(0 0 0 transparent); }
+          50% { transform: scale(1.1); filter: drop-shadow(0 0 20px rgba(76,133,229,0.4)); }
+        }
+        @keyframes fade-up {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes pulse-dot {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.8); opacity: 0.5; }
+        }
+      `}</style>
     </div>
   );
 }
@@ -94,10 +301,9 @@ export default function AddressPage() {
   const [activeIndex, setActiveIndex] = useState(-1);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [apiReady, setApiReady] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const { isSyncing, lastSyncedAt, syncNow } = useAutoSync();
-
   const { data: properties = [] } = useProperties(query);
 
   /* Open dropdown whenever we have results or query changes */
@@ -114,9 +320,7 @@ export default function AddressPage() {
     }
   }, [activeIndex]);
 
-  const { location, buildingInsights, setLocation, setSatelliteImageUrl, setBuildingInsights, setEstimateId } = useEstimatorStore();
-
-  const noop = useCallback(() => {}, []);
+  const { setLocation, setSatelliteImageUrl, setBuildingInsights, setEstimateId } = useEstimatorStore();
 
   const selectProperty = useCallback(
     async (property: Property) => {
@@ -139,8 +343,7 @@ export default function AddressPage() {
         setSatelliteImageUrl(result.satelliteImageUrl);
         setBuildingInsights(result.buildingInsights);
         setEstimateId(result.estimateId);
-        syncNow();
-        navigate("/estimator");
+        setApiReady(true);
       } catch (err) {
         console.error("Failed to load building data:", err);
         toast.error("Estimate failed", {
@@ -192,23 +395,7 @@ export default function AddressPage() {
   }, []);
 
   if (loading) {
-    return (
-      <>
-        {location && (
-          <div className="fixed inset-0 z-0 opacity-0 pointer-events-none">
-            <Scene
-              location={location}
-              buildingInsights={buildingInsights}
-              selectedIndices={[]}
-              onToggleSegment={noop}
-              onClearSegments={noop}
-              onCreditsUpdate={noop}
-            />
-          </div>
-        )}
-        <LoadingSpinner />
-      </>
-    );
+    return <LoadingSpinner apiReady={apiReady} onComplete={() => navigate("/estimator")} />;
   }
 
   return (
@@ -224,7 +411,7 @@ export default function AddressPage() {
             <StepCrumbs current={1} />
           </div>
 
-          <SavedIndicator isSyncing={isSyncing} lastSyncedAt={lastSyncedAt} />
+          <NavIconButton icon="history" tooltip="History" onClick={() => navigate("/estimates")} />
           <NavIconButton icon="arrow_back" tooltip="Back" onClick={() => navigate("/")} />
         </GlassNav>
       </div>

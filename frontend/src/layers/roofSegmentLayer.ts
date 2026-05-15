@@ -72,8 +72,7 @@ export function createRoofSegmentLayer(
         properties: { index: idx, area: seg.area_sq_ft },
       };
     })
-    .filter((f): f is NonNullable<typeof f> => f !== null)
-    .sort((a, b) => b.properties.area - a.properties.area);
+    .filter((f): f is NonNullable<typeof f> => f !== null);
 
   return new GeoJsonLayer<SegmentFeatureProps>({
     id: "roof-segments",
